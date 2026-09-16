@@ -34,7 +34,13 @@ python reference/test_directory.py     # directory: 13 checks (submit, ranking, 
 python reference/test_negotiation.py   # negotiation: 10 checks (offer/counter/accept, no self-dealing, freeze)
 python reference/test_keys.py          # keys: 14 checks (Ed25519 vector, fail-closed verify, advertised keys, live receipts)
 python reference/test_escalation.py    # escalation: 15 checks (raise/decide/appeal, freeze/resume, auto-resolve, timeout)
+python reference/test_streaming.py     # streaming: 6 checks (SSE replay, live tail, resume, guards)
 ```
+
+## Streaming (demo)
+
+`GET /amcp/session/<id>/events?actor=<member>&cursor=<seq>&wait=<s>` — replay-then-tail over the
+timeline log, role-redacted at serve time, bounded hold (max 60s; reconnect with last `seq`).
 
 Keys: Ed25519 active when `pynacl` is installed (seed bound to `--secret`), dev-HMAC fallback otherwise — same envelope shape either way (`GET /amcp/keys`). Run tests with the interpreter that has pynacl (here: `python`, 3.13).
 

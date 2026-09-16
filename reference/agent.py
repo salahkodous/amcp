@@ -194,7 +194,18 @@ def scoped_snapshot(sess: dict, role: str) -> dict:
 
 
 def timeline_append(sess: dict, entry: dict):
-    sess["timeline"].append({"ts": now_iso(), **entry})
+    # Per-session monotonic seq: the stream cursor. Single-writer assigns it
+    # (production: the DO); consumers treat gaps as "reconnect and replay".
+    entry = {"seq": sess.get("_seq", 0) + 1, "ts": now_iso(), **entry}
+    sess["_seq"] = entry["seq"]
+    sess["timeline"].append(entry)
+
+
+def visible_events(sess: dict, role: str):
+    """Serve-time redaction: same visibility rule as session views, applied
+    per reader on every read (roles can change mid-session)."""
+    return [e for e in sess["timeline"]
+            if e.get("visibility", ["*"]) == ["*"] or role in e.get("visibility", ["*"])]
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -270,6 +281,9 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError as e:
                 self._error(422, "bad_request", str(e)[:200])
         elif url.path.startswith("/amcp/session/"):
+            parts = url.path.split("/")
+            if len(parts) == 5 and parts[4] == "events":
+                return self._session_events(parts[3])
             # GET /amcp/session/<id>?actor=<member-id> — role-scoped view
             sid = url.path.split("/")[3] if len(url.path.split("/")) > 3 else ""
             sess = store.sessions.get(sid)
@@ -284,9 +298,7 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, {"id": sess["id"], "state": sess["state"], "role": role,
                              "blackboard": scoped_snapshot(sess, role),
                              "budget": sess["budget"],
-                             "timeline": [e for e in sess["timeline"]
-                                          if e.get("visibility", ["*"]) == ["*"]
-                                          or role in e.get("visibility", ["*"])]})
+                             "timeline": visible_events(sess, role)})
         else:
             self._error(404, "unknown_method", f"no such endpoint: {url.path}")
 
@@ -425,6 +437,55 @@ class Handler(BaseHTTPRequestHandler):
         self._send(201, {"id": sid, "state": "active",
                          "join": {m["actor"]["id"]: {"role": m["role"],
                                   "snapshot": scoped_snapshot(sess, m["role"])} for m in sess["members"]}})
+
+    def _session_events(self, sid: str):
+        # SSE fan-out over the timeline log. Replay-then-tail with a bounded
+        # hold (?wait= seconds, max 60): the writer never blocks, slow readers
+        # reconnect with their last seq. Errors are plain JSON, pre-stream.
+        qs = parse_qs(urlparse(self.path).query)
+        sess = store.sessions.get(sid)
+        if not sess:
+            return self._error(404, "unknown_agent", f"unknown session: {sid!r}")
+        actor = (qs.get("actor") or [None])[0]
+        m = _member(sess, actor) if actor else None
+        if not m:
+            return self._error(403, "capability_denied",
+                               "event streams require member actor=? (role-scoped)")
+        try:
+            cursor = int((qs.get("cursor") or ["0"])[0])
+            wait = max(1.0, min(60.0, float((qs.get("wait") or ["25"])[0])))
+        except ValueError:
+            return self._error(422, "bad_request", "cursor must be int, wait numeric")
+        role = m["role"]
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Connection", "keep-alive")
+        self.end_headers()
+
+        def emit(ev: dict):
+            line = f"id: {ev['seq']}\nevent: {ev.get('kind', 'event')}\ndata: "
+            self.wfile.write(line.encode() + json.dumps(ev).encode() + b"\n\n")
+
+        deadline = time.time() + wait
+        last_hb = time.time()
+        sent = cursor
+        try:
+            while True:
+                for ev in visible_events(sess, role):
+                    if ev["seq"] > sent:
+                        emit(ev)
+                        sent = ev["seq"]
+                self.wfile.flush()
+                if time.time() >= deadline:
+                    return
+                if time.time() - last_hb >= 15:
+                    self.wfile.write(b": heartbeat\n\n")
+                    self.wfile.flush()
+                    last_hb = time.time()
+                time.sleep(0.2)
+        except (BrokenPipeError, ConnectionResetError):
+            pass  # slow/gone reader: it resumes with its last seq
 
     def _esc_unpause(self, sess: dict, esc: dict):
         if esc.get("paused_by_us") and sess["state"] == "paused":
