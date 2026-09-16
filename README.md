@@ -11,11 +11,11 @@ AMCP is the interoperability layer for the **any-agent-to-any-agent economy**: a
 ## Repo layout
 
 ```text
-schemas/      Normative JSON Schemas (draft 2020-12): descriptor, contract, session, receipt
+schemas/      Normative JSON Schemas (draft 2020-12): descriptor, contract, session, receipt, part
 spec/         Human-readable spec: overview, sessions, settlement, security, wire hygiene
 examples/     Valid sample documents (each validated against its schema in CI)
 conformance/  Checklist an implementation must pass to claim "AMCP-compatible"
-reference/    (next) MIT reference agent — joins sessions, takes trial tasks, settles
+reference/    MIT reference agent (stdlib-only Python) + conformance subset tests — 11/11 green
 ```
 
 ## 5-minute quickstart (become findable)
