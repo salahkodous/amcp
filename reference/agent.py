@@ -85,6 +85,10 @@ try:
     from .directory import Directory  # noqa: E402
 except ImportError:  # pragma: no cover — direct script execution fallback
     from directory import Directory  # type: ignore[no-redef]
+try:
+    from . import escalation as esc_eval  # noqa: E402
+except ImportError:  # pragma: no cover
+    import escalation as esc_eval  # type: ignore[no-redef]
 directory = Directory()
 
 
@@ -412,6 +416,7 @@ class Handler(BaseHTTPRequestHandler):
                        "scheme": (body.get("budget") or {}).get("scheme", "upto")},
             "conflict_policy": body.get("conflict_policy", "coordinator_arbitrates"),
             "escalation": list(body.get("escalation") or []),
+            "escalations": {},
             "state": "active", "timeline": [], "claims": {},
         }
         timeline_append(sess, {"kind": "session_created", "visibility": ["*"],
@@ -420,6 +425,14 @@ class Handler(BaseHTTPRequestHandler):
         self._send(201, {"id": sid, "state": "active",
                          "join": {m["actor"]["id"]: {"role": m["role"],
                                   "snapshot": scoped_snapshot(sess, m["role"])} for m in sess["members"]}})
+
+    def _esc_unpause(self, sess: dict, esc: dict):
+        if esc.get("paused_by_us") and sess["state"] == "paused":
+            sess["state"] = "active"
+            esc["paused_by_us"] = False
+            timeline_append(sess, {"kind": "session_resumed", "visibility": ["*"],
+                                   "actor": "policy:" + esc["policy"],
+                                   "reason": f"escalation {esc['id']} resolved"})
 
     def _nego_terms(self, terms: dict) -> dict:
         price = _amt(terms.get("price_usdc", "0"))
@@ -492,9 +505,11 @@ class Handler(BaseHTTPRequestHandler):
             if not sub:
                 return self._error(422, "bad_request", "subtask required")
             if sub in sess["claims"]:
+                holder = sess["claims"][sub]
+                holder = holder["by"] if isinstance(holder, dict) else holder
                 return self._error(409, "terms_rejected",
-                                   f"already claimed by {sess['claims'][sub]}")
-            sess["claims"][sub] = m["actor"]["id"]
+                                   f"already claimed by {holder}")
+            sess["claims"][sub] = {"by": m["actor"]["id"], "at": now_iso()}
             timeline_append(sess, {"kind": "claim", "visibility": ["*"],
                                    "actor": m["actor"]["id"], "subtask": sub})
             return self._send(200, {"subtask": sub, "claimed_by": m["actor"]["id"]})
@@ -520,6 +535,87 @@ class Handler(BaseHTTPRequestHandler):
                                    "task_ref": body.get("task_ref")})
             return self._send(200, {"spent_usdc": sess["budget"]["spent_usdc"],
                                    "ceiling_usdc": sess["budget"]["ceiling_usdc"]})
+        if action == "escalate":
+            # Raise a dispute. human_escalation freezes scope by pausing the
+            # session (reuses tested pause machinery); first_claim_wins
+            # auto-resolves immediately with cited evidence.
+            if sess["state"] not in ("active", "paused"):
+                return self._error(409, "terms_rejected", f"session is {sess['state']}")
+            kind = body.get("kind")
+            if kind not in ("claim", "budget", "flag"):
+                return self._error(422, "bad_request", "kind must be claim|budget|flag")
+            policy = sess["conflict_policy"]
+            if policy not in esc_eval.DECIDER:
+                return self._error(422, "bad_request", f"unknown conflict_policy: {policy!r}")
+            if policy == "human_escalation" and not esc_eval.approvers(sess):
+                return self._error(422, "bad_request", "human_escalation needs an approver member")
+            eid = "esc_" + uuid.uuid4().hex[:16]
+            esc = {"id": eid, "session_id": sid, "kind": kind,
+                   "refs": list(body.get("refs") or []),
+                   "raised_by": m["actor"]["id"], "raised_at": now_iso(),
+                   "policy": policy,  # frozen: later edits can't move goalposts
+                   "timeout_seconds": int(body.get("timeout_seconds", esc_eval.DEFAULT_TIMEOUT_SECONDS)),
+                   "state": "open", "appeals": 0, "decision": None, "paused_by_us": False}
+            esc["timeout_at"] = time.time() + esc["timeout_seconds"]
+            sess["escalations"][eid] = esc
+            if policy == "first_claim_wins":
+                esc["decision"] = esc_eval.auto_resolve(sess, esc)
+                esc["decision"]["signatures"] = {"decider": signer.sign(
+                    {k: v for k, v in esc["decision"].items() if k != "signatures"})}
+                esc["state"] = "decided"
+                timeline_append(sess, {"kind": "escalation_auto_resolved", "visibility": ["*"],
+                                       "actor": "policy:first_claim_wins", "escalation": eid,
+                                       "decision": esc["decision"]})
+                return self._send(201, esc)
+            if policy == "human_escalation" and sess["state"] == "active":
+                sess["state"] = "paused"
+                esc["paused_by_us"] = True
+                timeline_append(sess, {"kind": "session_paused", "visibility": ["*"],
+                                       "actor": "policy:human_escalation",
+                                       "reason": f"escalation {eid} froze scope"})
+            timeline_append(sess, {"kind": "escalation_raised", "visibility": ["*"],
+                                   "actor": m["actor"]["id"], "escalation": eid, "policy": policy})
+            return self._send(201, esc)
+        if action == "decide":
+            # Decide, appeal (once, to approver), or lazy timeout default.
+            esc = sess["escalations"].get(body.get("escalation_id", ""))
+            if not esc:
+                return self._error(404, "unknown_agent", "unknown escalation for this session")
+            if esc["state"] in ("decided", "final", "timed_out") and not body.get("appeal"):
+                return self._error(409, "terms_rejected", f"escalation is {esc['state']}")
+            if esc["state"] == "open" and time.time() > esc["timeout_at"]:
+                esc["decision"] = esc_eval.safe_default(esc)
+                esc["state"] = "timed_out"
+                self._esc_unpause(sess, esc)
+                timeline_append(sess, {"kind": "escalation_timed_out", "visibility": ["*"],
+                                       "escalation": esc["id"], "decision": esc["decision"]})
+                return self._send(200, esc)
+            if body.get("appeal"):
+                if esc["appeals"] >= 1:
+                    return self._error(409, "terms_rejected", "one appeal only; decision is final")
+                if not esc_eval.approvers(sess):
+                    return self._error(409, "terms_rejected", "no approver to hear appeal")
+                esc["appeals"] += 1
+                esc["state"] = "appealed"
+                timeline_append(sess, {"kind": "escalation_appealed", "visibility": ["*"],
+                                       "actor": m["actor"]["id"], "escalation": esc["id"]})
+                return self._send(200, esc)
+            ok, err = esc_eval.can_decide(sess, esc, m["actor"]["id"], role)
+            if not ok:
+                return self._error(403, "capability_denied", err)
+            if not body.get("decision"):
+                return self._error(422, "bad_request", "decision required")
+            esc["decision"] = {"outcome": body["decision"],
+                               "rationale": body.get("rationale", ""),
+                               "decided_by": m["actor"]["id"], "decided_at": now_iso()}
+            esc["decision"]["signatures"] = {"decider": signer.sign(
+                {k: v for k, v in esc["decision"].items() if k != "signatures"})}
+            esc["state"] = "final" if esc["state"] == "appealed" else "decided"
+            self._esc_unpause(sess, esc)
+            timeline_append(sess, {"kind": "escalation_decided", "visibility": ["*"],
+                                   "actor": m["actor"]["id"], "escalation": esc["id"],
+                                   "decision": esc["decision"]})
+            return self._send(200, esc)
         if action == "negotiate":
             # Minimal offer/counter/accept/decline over settlement terms.
             # No self-dealing: counter/accept/decline require a different

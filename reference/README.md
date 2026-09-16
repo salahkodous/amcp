@@ -33,6 +33,7 @@ python reference/test_sessions.py      # L3 subset: 19 checks (roles, canaries, 
 python reference/test_directory.py     # directory: 13 checks (submit, ranking, filters, evidence re-rank, pagination)
 python reference/test_negotiation.py   # negotiation: 10 checks (offer/counter/accept, no self-dealing, freeze)
 python reference/test_keys.py          # keys: 14 checks (Ed25519 vector, fail-closed verify, advertised keys, live receipts)
+python reference/test_escalation.py    # escalation: 15 checks (raise/decide/appeal, freeze/resume, auto-resolve, timeout)
 ```
 
 Keys: Ed25519 active when `pynacl` is installed (seed bound to `--secret`), dev-HMAC fallback otherwise — same envelope shape either way (`GET /amcp/keys`). Run tests with the interpreter that has pynacl (here: `python`, 3.13).
