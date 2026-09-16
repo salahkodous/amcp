@@ -18,6 +18,7 @@
    python reference/test_escalation.py
    python reference/test_streaming.py
    ```
+   SDK (from `sdk-ts/`): `npm test` (fixtures + behavior + drift), `npm run check`.
    (Use the interpreter with `pynacl` for live-key checks; without it, key tests fall back to dev-HMAC paths.)
 3. **Two-track firewall.** Anakin-specific needs do NOT get private protocol fields. Propose them as RFCs against `spec/`; one private field anywhere fails review.
 4. **Reference stays boring.** `reference/` is stdlib-only Python, optimized for readability. Performance work belongs in `runtime-rs/`; ergonomics in `sdk-ts/`. If your PR makes the reference harder to read, it goes elsewhere.

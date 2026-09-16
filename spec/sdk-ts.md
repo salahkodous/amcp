@@ -26,7 +26,7 @@ sdk-ts/
 
 - **Zero runtime dependencies.** A dependency is a supply-chain vote every downstream user must trust. Dev-deps only (build, test).
 - **Runtimes: Node 20+ AND Cloudflare Workers.** No `node:*` imports in `src/` (enforced by lint); WebCrypto for Ed25519 so verification works at the edge. Anything platform-specific lives in documented adapter shims, never in core.
-- **Generated types, not hand types.** `types.ts` is generated from the normative schemas. Hand-editing it is a review failure — drift between SDK types and schemas is how two protocols happen.
+- **Mirrored types with a drift tripwire.** `types.ts` mirrors the normative schemas 1:1 and `test/schema-drift.test.ts` fails CI if any schema `required` field is missing from it. (Generation via json-schema-to-ts remains an option; the tripwire is the guarantee either way.)
 - **Errors are values.** Every wire code maps to a typed error carrying `retryable`, `doc`, and the raw envelope. Retries key off `retryable`, not message sniffing.
 - **SSE client resumes by construction.** The stream helper persists last `seq` (caller-provided store, memory default) and reconnects with backoff+jitter. Users never manage cursors manually.
 

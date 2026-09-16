@@ -1,0 +1,15 @@
+export { AmcpError } from "./errors.js";
+export type { WireErrorBody } from "./errors.js";
+export { AmcpClient } from "./client.js";
+export type { ClientOptions } from "./client.js";
+export { canonicalJson, verifyEd25519, TEST_VECTOR } from "./envelope.js";
+export { IdentityClient, defineDescriptor } from "./descriptor.js";
+export { TaskClient } from "./task.js";
+export type { TaskResult } from "./task.js";
+export { SessionClient } from "./session.js";
+export type { RoleDef, SessionEvent } from "./session.js";
+export { DirectoryClient } from "./directory.js";
+export type { SearchFilters } from "./directory.js";
+export { replayFile } from "./replay.js";
+export type { FixtureResult } from "./replay.js";
+export type * from "./types.js";
