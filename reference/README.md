@@ -31,6 +31,7 @@ curl 'localhost:8471/amcp/receipts?limit=5' | python -m json.tool
 python reference/test_conformance.py   # L0–L2 subset: 11 checks
 python reference/test_sessions.py      # L3 subset: 19 checks (roles, canaries, claims, budgets, lifecycle)
 python reference/test_directory.py     # directory: 13 checks (submit, ranking, filters, evidence re-rank, pagination)
+python reference/test_negotiation.py   # negotiation: 10 checks (offer/counter/accept, no self-dealing, freeze)
 ```
 
 ## Directory (demo deployment, same server)

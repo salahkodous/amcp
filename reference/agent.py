@@ -43,6 +43,7 @@ class Store:
         self.hits = {}         # window_start -> count (single global bucket, demo)
         self.sessions = {}     # session_id -> session dict (single-writer demo;
                                # production: leader/queue + versioned store)
+        self.negotiations = {}  # negotiation_id -> negotiation dict
 
 
 store = Store()
@@ -385,6 +386,15 @@ class Handler(BaseHTTPRequestHandler):
                          "join": {m["actor"]["id"]: {"role": m["role"],
                                   "snapshot": scoped_snapshot(sess, m["role"])} for m in sess["members"]}})
 
+    def _nego_terms(self, terms: dict) -> dict:
+        price = _amt(terms.get("price_usdc", "0"))
+        scheme = terms.get("scheme", "exact")
+        if scheme not in ("exact", "upto", "escrow"):
+            raise ValueError(f"unknown scheme: {scheme!r}")
+        if not terms.get("deliverable"):
+            raise ValueError("terms.deliverable required")
+        return {"price_usdc": str(price), "scheme": scheme, "deliverable": terms["deliverable"]}
+
     def _session_action(self, sid: str, action: str):
         body = self._sess_body()
         if body is None:
@@ -475,6 +485,59 @@ class Handler(BaseHTTPRequestHandler):
                                    "task_ref": body.get("task_ref")})
             return self._send(200, {"spent_usdc": sess["budget"]["spent_usdc"],
                                    "ceiling_usdc": sess["budget"]["ceiling_usdc"]})
+        if action == "negotiate":
+            # Minimal offer/counter/accept/decline over settlement terms.
+            # No self-dealing: counter/accept/decline require a different
+            # member than the last proposer. Accepted terms bind task_ref.
+            if sess["state"] != "active":
+                return self._error(409, "terms_rejected", f"session is {sess['state']}")
+            op = body.get("op")
+            if op == "offer":
+                try:
+                    terms = self._nego_terms(body.get("terms") or {})
+                except ValueError as e:
+                    return self._error(422, "bad_request", str(e))
+                nid = "nego_" + uuid.uuid4().hex[:16]
+                nego = {"id": nid, "session_id": sid, "status": "open",
+                        "terms": terms, "task_ref": body.get("task_ref"),
+                        "last_by": m["actor"]["id"],
+                        "history": [{"by": m["actor"]["id"], "terms": terms, "ts": now_iso()}]}
+                store.negotiations[nid] = nego
+                timeline_append(sess, {"kind": "negotiation_offered", "visibility": ["*"],
+                                       "actor": m["actor"]["id"], "negotiation": nid})
+                return self._send(201, nego)
+            nego = store.negotiations.get(body.get("negotiation_id", ""))
+            if not nego or nego["session_id"] != sid:
+                return self._error(404, "unknown_agent", "unknown negotiation for this session")
+            if nego["status"] != "open":
+                return self._error(409, "terms_rejected", f"negotiation is {nego['status']}")
+            if op in ("counter", "accept", "decline") and m["actor"]["id"] == nego["last_by"]:
+                return self._error(403, "capability_denied", "cannot answer your own offer")
+            if op == "counter":
+                try:
+                    terms = self._nego_terms(body.get("terms") or {})
+                except ValueError as e:
+                    return self._error(422, "bad_request", str(e))
+                nego["terms"] = terms
+                nego["last_by"] = m["actor"]["id"]
+                nego["history"].append({"by": m["actor"]["id"], "terms": terms, "ts": now_iso()})
+                timeline_append(sess, {"kind": "negotiation_countered", "visibility": ["*"],
+                                       "actor": m["actor"]["id"], "negotiation": nego["id"]})
+                return self._send(200, nego)
+            if op == "accept":
+                nego["status"] = "accepted"
+                nego["last_by"] = m["actor"]["id"]
+                timeline_append(sess, {"kind": "negotiation_accepted", "visibility": ["*"],
+                                       "actor": m["actor"]["id"], "negotiation": nego["id"],
+                                       "terms": nego["terms"]})
+                return self._send(200, nego)
+            if op == "decline":
+                nego["status"] = "declined"
+                nego["last_by"] = m["actor"]["id"]
+                timeline_append(sess, {"kind": "negotiation_declined", "visibility": ["*"],
+                                       "actor": m["actor"]["id"], "negotiation": nego["id"]})
+                return self._send(200, nego)
+            return self._error(422, "bad_request", "op must be offer|counter|accept|decline")
         if action in ("pause", "complete", "cancel"):
             # Spec: coordinator or approver may pause; only coordinator
             # may complete/cancel.
