@@ -8,9 +8,11 @@ from decimal import Decimal
 
 sys.path.insert(0, ".")
 from reference.agent import _amt  # noqa: E402
+from reference.directory import Directory  # noqa: E402
 
 PASS, FAIL = 0, 0
 vec = json.load(open("conformance/vectors/money.json"))
+rep = json.load(open("conformance/vectors/reputation.json"))
 
 
 def check(name, cond, detail=""):
@@ -51,6 +53,28 @@ for bad in vec["invalid"]:
         check(f"invalid {bad!r}", False, "accepted")
     except ValueError:
         PASS += 1
+
+assert rep["version"] == Directory.SCORE_VERSION, "vector/scorer version drift"
+assert rep["weights"] == Directory.SCORE_WEIGHTS, "vector/weight drift"
+
+DESC = {"amcp_version": "0.1", "id": "amcp:t:v", "name": "V", "description": "vector agent",
+        "version": "1.0.0", "capabilities": []}
+
+for case in rep["cases"]:
+    d = Directory()
+    d.submit(DESC)
+    for e in case["evidence"]:
+        d.record_evidence("amcp:t:v", e["kind"], e["ref"], e["outcome"],
+                          weight_basis=e.get("weight_basis", "settlement"),
+                          reviewer=e.get("reviewer", ""), ts=e.get("ts", ""))
+    got = d.score("amcp:t:v")
+    exp = case["expected"]
+    ok = got["version"] == "reputation-v1" and got["scores"] == exp["scores"]
+    for k in ("composite",):
+        g, w = got[k], exp[k]
+        ok = ok and ((g is None and w is None) or (g is not None and w is not None and abs(g - w) < 1e-9))
+    ok = ok and got["experimental"] == exp["experimental"]
+    check(f"reputation {case['name']}", ok, f"{got} != {exp}" if not ok else "")
 
 print(f"{PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)

@@ -91,7 +91,8 @@ class Directory:
 
     # -- evidence ----------------------------------------------------
     def record_evidence(self, agent_id: str, kind: str, ref: str, outcome: str,
-                          weight_basis: str = "settlement", reviewer: str = ""):
+                          weight_basis: str = "settlement", reviewer: str = "",
+                          ts: str = ""):
         if agent_id not in self.agents:
             return 404, {"error": {"code": "unknown_agent", "message": agent_id,
                                    "retryable": False, "doc": "https://amcp.dev/spec/wire#error-codes"}}
@@ -100,7 +101,7 @@ class Directory:
                                    "retryable": False, "doc": "https://amcp.dev/spec/wire#error-codes"}}
         ev = {"kind": kind, "ref": ref, "outcome": outcome,
               "weight_basis": weight_basis, "reviewer": reviewer or None,
-              "ts": now_iso()}
+              "ts": ts or now_iso()}
         self.evidence.setdefault(agent_id, []).append(ev)
         return 201, {"recorded": True, "evidence": ev}
 
@@ -140,7 +141,7 @@ class Directory:
         scores = {
             "settlement": self._ratio(
                 [e for e in by_kind.get("receipt", []) if e["weight_basis"] == "settlement"], accepted),
-            "trials": (lambda n: min(1.0, n / 5) if evs else None)(
+            "trials": (lambda n: min(1.0, n / 5) if by_kind.get("trial") else None)(
                 sum(1 for e in by_kind.get("trial", []) if e["outcome"] == "accepted")),
             "feedback": self._ratio(by_kind.get("feedback", []), accepted),
             "validation": self._ratio(by_kind.get("validation", []), accepted),

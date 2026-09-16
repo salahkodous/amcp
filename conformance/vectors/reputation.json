@@ -1,0 +1,54 @@
+{
+  "version": "reputation-v1",
+  "weights": {"settlement": 0.4, "trials": 0.2, "feedback": 0.15, "validation": 0.15, "reliability": 0.1},
+  "cases": [
+    {
+      "name": "blended-present-only",
+      "evidence": [
+        {"kind": "receipt", "ref": "rc1", "outcome": "accepted", "weight_basis": "settlement", "reviewer": "0xb1"},
+        {"kind": "receipt", "ref": "rc2", "outcome": "accepted", "weight_basis": "settlement", "reviewer": "0xb2"},
+        {"kind": "trial", "ref": "t1", "outcome": "accepted", "reviewer": "0xb1"},
+        {"kind": "feedback", "ref": "f1", "outcome": "accepted", "reviewer": "0xb3"}
+      ],
+      "expected": {
+        "scores": {"settlement": 1.0, "trials": 0.2, "feedback": 1.0, "validation": null, "reliability": 1.0},
+        "composite": 0.8117647058823529,
+        "experimental": {"weight": 0, "unique_reviewers": 3, "reviewer_overlap": 0, "burst_windows": 0}
+      }
+    },
+    {
+      "name": "empty-is-null-not-zero",
+      "evidence": [],
+      "expected": {
+        "scores": {"settlement": null, "trials": null, "feedback": null, "validation": null, "reliability": null},
+        "composite": null,
+        "experimental": {"weight": 0, "unique_reviewers": 0, "reviewer_overlap": 0, "burst_windows": 0}
+      }
+    },
+    {
+      "name": "revocation-penalizes-reliability",
+      "evidence": [
+        {"kind": "feedback", "ref": "f1", "outcome": "accepted", "reviewer": "0xb1"},
+        {"kind": "revocation", "ref": "f1", "outcome": "revoked", "reviewer": "0xb1"}
+      ],
+      "expected": {
+        "scores": {"settlement": null, "trials": null, "feedback": 1.0, "validation": null, "reliability": 0.6666666666666667},
+        "composite": 0.8666666666666667,
+        "experimental": {"weight": 0, "unique_reviewers": 1, "reviewer_overlap": 0, "burst_windows": 0}
+      }
+    },
+    {
+      "name": "burst-ring-flagged",
+      "evidence": [
+        {"kind": "feedback", "ref": "g1", "outcome": "accepted", "reviewer": "0xsybil", "ts": "2026-09-01T10:00:00Z"},
+        {"kind": "feedback", "ref": "g2", "outcome": "accepted", "reviewer": "0xsybil", "ts": "2026-09-01T10:20:00Z"},
+        {"kind": "feedback", "ref": "g3", "outcome": "accepted", "reviewer": "0xsybil", "ts": "2026-09-01T10:40:00Z"}
+      ],
+      "expected": {
+        "scores": {"settlement": null, "trials": null, "feedback": 1.0, "validation": null, "reliability": 1.0},
+        "composite": 1.0,
+        "experimental": {"weight": 0, "unique_reviewers": 1, "reviewer_overlap": 0, "burst_windows": 1}
+      }
+    }
+  ]
+}
