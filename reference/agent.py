@@ -15,7 +15,10 @@ from decimal import Decimal, InvalidOperation
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
-from .signer import DevSigner, canonical
+try:
+    from .signer import DevSigner, Ed25519Signer, canonical, verify_ed25519
+except ImportError:  # pragma: no cover — direct script execution fallback
+    from signer import DevSigner, Ed25519Signer, canonical, verify_ed25519  # type: ignore[no-redef]
 
 AMCP_VERSION = "0.1"
 AGENT_ID = "amcp:reference:demo_001"
@@ -48,6 +51,35 @@ class Store:
 
 store = Store()
 signer = DevSigner(b"dev-secret-change-me")
+keychain = [signer]  # active first; retired keys stay for verifying history
+
+
+def init_signer(secret: bytes):
+    """Ed25519 when pynacl is present (seed bound to --secret), else dev HMAC.
+    Both speak the same envelope shape; conformance tells them apart by alg."""
+    global signer, keychain
+    try:
+        signer = Ed25519Signer(hashlib.sha256(secret).digest())
+    except RuntimeError:
+        signer = DevSigner(secret)
+    keychain = [signer]
+
+
+def advertised_keys() -> list:
+    return [{"id": k.key_id, "alg": k.alg, "pub": k.pub_hex,
+             **({"note": "dev-only, undiscoverable"} if k.pub_hex is None else {})}
+            for k in keychain]
+
+
+def verify_envelope(obj, envelope: dict) -> bool:
+    """Verify against the whole keychain (active + retired). Unknown alg or
+    unknown key_id fails closed."""
+    if not isinstance(envelope, dict):
+        return False
+    for k in keychain:
+        if k.key_id == envelope.get("key_id") and k.alg == envelope.get("alg"):
+            return k.verify(obj, envelope)
+    return False
 
 try:
     from .directory import Directory  # noqa: E402
@@ -94,7 +126,8 @@ def descriptor(host: str) -> dict:
         "description": "Minimal conformance demonstration: echo + toy lead scoring with trials and receipts.",
         "organization": "AMCP",
         "version": "0.1.0",
-        "public_key": "dev-hmac-only-see-signer.py",
+        "public_key": keychain[0].pub_hex or "dev-hmac-only-see-signer.py",
+        "keys": advertised_keys(),
         "domain": ["demo"],
         "languages": ["en"],
         "capabilities": list(CAPABILITIES.values()),
@@ -212,6 +245,8 @@ class Handler(BaseHTTPRequestHandler):
                 "descriptor_valid": True, "a2a_card": False, "x402_live": False,
                 "sessions": True, "escrow": False,
                 "note": "L0+L2-task+L3-session demo. Escrow/real settlement still stubbed."}})
+        elif url.path == "/amcp/keys":
+            self._send(200, {"keys": advertised_keys(), "active": keychain[0].key_id})
         elif url.path == "/amcp/receipts":
             qs = parse_qs(url.query)
             limit = max(1, min(100, int(qs.get("limit", ["20"])[0])))
@@ -563,5 +598,5 @@ if __name__ == "__main__":
     ap.add_argument("--port", type=int, default=8471)
     ap.add_argument("--secret", default="dev-secret-change-me")
     args = ap.parse_args()
-    signer = DevSigner(args.secret.encode())
+    init_signer(args.secret.encode())
     serve(args.port)

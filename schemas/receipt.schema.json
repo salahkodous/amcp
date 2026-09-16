@@ -4,27 +4,106 @@
   "title": "AMCP Settlement Receipt",
   "description": "Signed portable proof of a settled task. The unit of reputation. AMCP v0.1.",
   "type": "object",
-  "required": ["amcp_version", "receipt_id", "contract_id", "payer", "payee", "amount_usdc", "task_ref", "artifact_hash", "settlement_proof", "outcome", "signatures"],
+  "required": [
+    "amcp_version",
+    "receipt_id",
+    "contract_id",
+    "payer",
+    "payee",
+    "amount_usdc",
+    "task_ref",
+    "artifact_hash",
+    "settlement_proof",
+    "outcome",
+    "signatures"
+  ],
   "properties": {
-    "amcp_version": { "const": "0.1" },
-    "receipt_id": { "type": "string", "pattern": "^rcpt_[A-Za-z0-9_-]{8,64}$" },
-    "contract_id": { "type": "string" },
-    "session_id": { "type": ["string", "null"], "default": null },
-    "payer": { "type": "string" },
-    "payee": { "type": "string" },
-    "amount_usdc": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]{1,6})?$" },
-    "task_ref": { "type": "string" },
-    "artifact_hash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
-    "settlement_proof": { "type": "string", "description": "x402 settlement reference (scheme:tx/payment id)" },
-    "outcome": { "enum": ["accepted", "refunded", "split", "disputed_lost", "disputed_won"] },
-    "trial": { "type": "boolean", "default": false },
-    "decided_at": { "type": "string", "format": "date-time" },
+    "amcp_version": {
+      "const": "0.1"
+    },
+    "receipt_id": {
+      "type": "string",
+      "pattern": "^rcpt_[A-Za-z0-9_-]{8,64}$"
+    },
+    "contract_id": {
+      "type": "string"
+    },
+    "session_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "payer": {
+      "type": "string"
+    },
+    "payee": {
+      "type": "string"
+    },
+    "amount_usdc": {
+      "type": "string",
+      "pattern": "^[0-9]+(\\.[0-9]{1,6})?$"
+    },
+    "task_ref": {
+      "type": "string"
+    },
+    "artifact_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "settlement_proof": {
+      "type": "string",
+      "description": "x402 settlement reference (scheme:tx/payment id)"
+    },
+    "outcome": {
+      "enum": [
+        "accepted",
+        "refunded",
+        "split",
+        "disputed_lost",
+        "disputed_won"
+      ]
+    },
+    "trial": {
+      "type": "boolean",
+      "default": false
+    },
+    "decided_at": {
+      "type": "string",
+      "format": "date-time"
+    },
     "signatures": {
       "type": "object",
-      "required": ["payer", "platform"],
+      "required": [
+        "payer",
+        "platform"
+      ],
       "properties": {
-        "payer": { "type": "string" },
-        "platform": { "type": "string" }
+        "payer": {
+          "type": "string"
+        },
+        "platform": {
+          "type": "object",
+          "description": "Detached platform signature envelope over the receipt minus signatures.",
+          "required": [
+            "key_id",
+            "alg",
+            "sig"
+          ],
+          "properties": {
+            "key_id": {
+              "type": "string"
+            },
+            "alg": {
+              "type": "string"
+            },
+            "sig": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
       },
       "additionalProperties": false
     }

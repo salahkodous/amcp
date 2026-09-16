@@ -87,9 +87,17 @@ def main():
                     "trial": True, "price_usdc": "0.01"})
     check("trial executes", s == 200 and r["receipt"]["trial"] is True, s)
     rec = r["receipt"]
-    v = DevSigner(b"dev-secret-change-me").verify(
-        {k: v for k, v in rec.items() if k != "signatures"}, rec["signatures"]["platform"])
-    check("receipt verifies offline (dev secret)", v)
+    env = rec["signatures"]["platform"]
+    if env.get("alg") == "ed25519":
+        from reference.signer import verify_ed25519  # noqa: E402
+        s, keys, _ = call("GET", "/amcp/keys")
+        pub = next(k["pub"] for k in keys["keys"] if k["id"] == env["key_id"])
+        v = verify_ed25519(pub, {k: v for k, v in rec.items() if k != "signatures"}, env["sig"])
+        check("receipt verifies offline (ed25519, advertised key)", v)
+    else:
+        v = DevSigner(b"dev-secret-change-me").verify(
+            {k: v for k, v in rec.items() if k != "signatures"}, env)
+        check("receipt verifies offline (dev secret)", v)
     s, listing, _ = call("GET", "/amcp/receipts?limit=5")
     check("receipts list + pagination shape",
           s == 200 and isinstance(listing["data"], list) and "pagination" in listing, s)
