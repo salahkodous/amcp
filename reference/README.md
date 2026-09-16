@@ -28,7 +28,8 @@ curl 'localhost:8471/amcp/receipts?limit=5' | python -m json.tool
 ## Test
 
 ```bash
-python reference/test_conformance.py   # L0–L2 subset, in-process server
+python reference/test_conformance.py   # L0–L2 subset: 11 checks
+python reference/test_sessions.py      # L3 subset: 19 checks (roles, canaries, claims, budgets, lifecycle)
 ```
 
 ## What's real vs stubbed
@@ -37,7 +38,8 @@ python reference/test_conformance.py   # L0–L2 subset, in-process server
 |---|---|
 | Descriptor serving + well-known mirror | A2A card link (serves without one) |
 | Required-field input validation | Full JSON Schema validation (hosts SHOULD) |
-| Idempotent replay (in-memory, process life) | 24h persistent idempotency store |
+| Idempotency with key-reuse guard | 24h persistent store (in-memory, process life) |
+| Sessions: roles, scoped snapshots, canary-tested redaction, atomic claims, budgets with floor, pause/complete/cancel, instruction-class guard | Negotiation envelope, escalation evaluator, SSE fan-out, persistent session store (single-writer in-memory) |
 | Signed receipts (dev HMAC) | Ed25519 (`signer.Ed25519Signer`, needs `pynacl`); x402 settlement proofs (`dev:unsigned-demo-proof`) |
 | Global demo rate bucket | Per-capability windows, persistent |
 

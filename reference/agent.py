@@ -11,6 +11,7 @@ import hashlib
 import json
 import time
 import uuid
+from decimal import Decimal, InvalidOperation
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
@@ -33,13 +34,15 @@ def now_iso() -> str:
 
 class Store:
     """In-memory state. Production hosts persist: idempotency (24h),
-    receipts (permanent), tasks, rate windows."""
+    receipts (permanent), tasks, rate windows, sessions, timelines."""
 
     def __init__(self):
-        self.idempotency = {}  # (key, path) -> (status, body)
+        self.idempotency = {}  # (key, path) -> (status, body, req_hash)
         self.receipts = []     # receipt dicts, newest last
         self.tasks = {}        # task_id -> task dict
         self.hits = {}         # window_start -> count (single global bucket, demo)
+        self.sessions = {}     # session_id -> session dict (single-writer demo;
+                               # production: leader/queue + versioned store)
 
 
 store = Store()
@@ -118,6 +121,38 @@ def execute(capability: str, inputs: dict):
     raise KeyError(capability)
 
 
+# -- sessions ----------------------------------------------------------
+
+
+def _amt(s) -> Decimal:
+    try:
+        v = Decimal(str(s))
+    except (InvalidOperation, ValueError):
+        raise ValueError(f"invalid amount: {s!r}")
+    if v < 0:
+        raise ValueError("amount must be >= 0")
+    return v
+
+
+def _member(sess: dict, actor_id: str):
+    return next((m for m in sess["members"] if m["actor"]["id"] == actor_id), None)
+
+
+def _can_read(role_def: dict, key: str) -> bool:
+    return "*" in role_def["read"] or key in role_def["read"]
+
+
+def scoped_snapshot(sess: dict, role: str) -> dict:
+    """Role-scoped blackboard slice. The redaction boundary — hosts MUST NOT
+    leak unreadable keys (conformance probes with canaries)."""
+    role_def = sess["roles"][role]
+    return {k: v for k, v in sess["blackboard"].items() if _can_read(role_def, k)}
+
+
+def timeline_append(sess: dict, entry: dict):
+    sess["timeline"].append({"ts": now_iso(), **entry})
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "AMCP-Reference/0.1"
 
@@ -168,19 +203,44 @@ class Handler(BaseHTTPRequestHandler):
         elif url.path == "/amcp/health":
             self._send(200, {"amcp_version": AMCP_VERSION, "checks": {
                 "descriptor_valid": True, "a2a_card": False, "x402_live": False,
-                "sessions": False, "escrow": False,
-                "note": "L0+L2-task demo. See README for the road to L4."}})
+                "sessions": True, "escrow": False,
+                "note": "L0+L2-task+L3-session demo. Escrow/real settlement still stubbed."}})
         elif url.path == "/amcp/receipts":
             qs = parse_qs(url.query)
             limit = max(1, min(100, int(qs.get("limit", ["20"])[0])))
             items = store.receipts[-limit:][::-1]
             self._send(200, {"data": items,
                              "pagination": {"next_cursor": None, "has_more": False}})
+        elif url.path.startswith("/amcp/session/"):
+            # GET /amcp/session/<id>?actor=<member-id> — role-scoped view
+            sid = url.path.split("/")[3] if len(url.path.split("/")) > 3 else ""
+            sess = store.sessions.get(sid)
+            if not sess:
+                return self._error(404, "unknown_agent", f"unknown session: {sid!r}")
+            actor = parse_qs(url.query).get("actor", [None])[0]
+            m = _member(sess, actor) if actor else None
+            if not m:
+                return self._error(403, "capability_denied",
+                                   "session views require member actor=? (role-scoped)")
+            role = m["role"]
+            self._send(200, {"id": sess["id"], "state": sess["state"], "role": role,
+                             "blackboard": scoped_snapshot(sess, role),
+                             "budget": sess["budget"],
+                             "timeline": [e for e in sess["timeline"]
+                                          if e.get("visibility", ["*"]) == ["*"]
+                                          or role in e.get("visibility", ["*"])]})
         else:
             self._error(404, "unknown_method", f"no such endpoint: {url.path}")
 
     def do_POST(self):
         url = urlparse(self.path)
+        if url.path == "/amcp/session":
+            return self._session_create()
+        if url.path.startswith("/amcp/session/"):
+            parts = url.path.split("/")
+            if len(parts) == 5:
+                return self._session_action(parts[3], parts[4])
+            return self._error(404, "unknown_method", f"no such endpoint: {url.path}")
         if url.path != "/amcp/task":
             return self._error(404, "unknown_method", f"no such endpoint: {url.path}")
         if not self._rate_ok():
@@ -236,6 +296,164 @@ class Handler(BaseHTTPRequestHandler):
             req_hash = sha256_hex(canonical({"capability": capability, "inputs": inputs}))
             store.idempotency[(idem, url.path)] = (200, resp, req_hash)
         self._send(200, resp)
+
+    # -- sessions -----------------------------------------------------
+    def _sess_body(self):
+        body, err = self._read_json()
+        if err:
+            self._error(400, "bad_request", err)
+            return None
+        return body
+
+    def _sess_lookup(self, sid: str, actor: str | None):
+        sess = store.sessions.get(sid)
+        if not sess:
+            self._error(404, "unknown_agent", f"unknown session: {sid!r}")
+            return None, None
+        m = _member(sess, actor) if actor else None
+        if not m:
+            self._error(403, "capability_denied", "unknown or missing member actor")
+            return None, None
+        return sess, m
+
+    def _session_create(self):
+        body = self._sess_body()
+        if body is None:
+            return
+        roles = body.get("roles") or {}
+        members = body.get("members") or []
+        if not roles or not members:
+            return self._error(422, "bad_request", "roles{} and members[] are required")
+        for m in members:
+            if m.get("role") not in roles or "actor" not in m or "id" not in m["actor"]:
+                return self._error(422, "bad_request", "each member needs actor.id + a defined role")
+        try:
+            ceiling = _amt((body.get("budget") or {}).get("ceiling_usdc", "0"))
+        except ValueError as e:
+            return self._error(422, "bad_request", str(e))
+        sid = "sess_" + uuid.uuid4().hex[:16]
+        sess = {
+            "amcp_version": AMCP_VERSION, "id": sid,
+            "contract_id": body.get("contract_id"),
+            "members": [{"actor": m["actor"], "role": m["role"],
+                         "joined_at": now_iso(), "presence": "active"} for m in members],
+            "roles": roles,
+            "blackboard": dict(body.get("blackboard") or {}),
+            "budget": {"ceiling_usdc": str(ceiling), "spent_usdc": "0",
+                       "scheme": (body.get("budget") or {}).get("scheme", "upto")},
+            "conflict_policy": body.get("conflict_policy", "coordinator_arbitrates"),
+            "escalation": list(body.get("escalation") or []),
+            "state": "active", "timeline": [], "claims": {},
+        }
+        timeline_append(sess, {"kind": "session_created", "visibility": ["*"],
+                               "members": [m["actor"]["id"] for m in sess["members"]]})
+        store.sessions[sid] = sess
+        self._send(201, {"id": sid, "state": "active",
+                         "join": {m["actor"]["id"]: {"role": m["role"],
+                                  "snapshot": scoped_snapshot(sess, m["role"])} for m in sess["members"]}})
+
+    def _session_action(self, sid: str, action: str):
+        body = self._sess_body()
+        if body is None:
+            return
+        actor = body.get("actor")
+        if action == "join":
+            # Admit a new member (any active member may invite in demo;
+            # production: host policy + invite grants).
+            sess = store.sessions.get(sid)
+            if not sess:
+                return self._error(404, "unknown_agent", f"unknown session: {sid!r}")
+            if sess["state"] != "active":
+                return self._error(409, "terms_rejected", f"session is {sess['state']}, cannot join")
+            role = body.get("role")
+            if role not in sess["roles"] or not isinstance(actor, dict) or "id" not in actor:
+                return self._error(422, "bad_request", "actor{id} + defined role required")
+            if _member(sess, actor["id"]):
+                return self._error(409, "terms_rejected", "already a member")
+            sess["members"].append({"actor": actor, "role": role,
+                                    "joined_at": now_iso(), "presence": "active"})
+            timeline_append(sess, {"kind": "member_joined", "visibility": ["*"],
+                                   "actor": actor["id"], "role": role})
+            return self._send(200, {"role": role, "snapshot": scoped_snapshot(sess, role)})
+        sess, m = self._sess_lookup(sid, actor.get("id") if isinstance(actor, dict) else None)
+        if sess is None:
+            return
+        role, role_def = m["role"], sess["roles"][m["role"]]
+        if action == "message":
+            if sess["state"] not in ("active",):
+                return self._error(409, "terms_rejected", f"session is {sess['state']}")
+            target = body.get("to", "room")
+            parts = body.get("parts") or []
+            if not isinstance(parts, list) or not parts:
+                return self._error(422, "bad_request", "parts[] required")
+            for p in parts:
+                if p.get("class") == "instruction":
+                    return self._error(403, "capability_denied",
+                                       "instruction-class parts require an authorized signed actor")
+            if target == "room":
+                if "room" not in role_def["message"] and "*" not in role_def["message"]:
+                    return self._error(403, "capability_denied", "role may not broadcast")
+                delivered = [x["actor"]["id"] for x in sess["members"]
+                             if x["actor"]["id"] != m["actor"]["id"]]
+            elif target in sess["roles"]:
+                delivered = [x["actor"]["id"] for x in sess["members"]
+                             if x["role"] == target and x["actor"]["id"] != m["actor"]["id"]]
+            else:
+                peer = _member(sess, target)
+                if not peer:
+                    return self._error(404, "unknown_agent", f"no such member/channel: {target!r}")
+                delivered = [target]
+            timeline_append(sess, {"kind": "message", "visibility": ["*"],
+                                   "from": m["actor"]["id"], "to": target,
+                                   "parts": len(parts)})
+            return self._send(200, {"delivered_to": delivered})
+        if action == "claim":
+            if sess["state"] != "active":
+                return self._error(409, "terms_rejected", f"session is {sess['state']}")
+            sub = body.get("subtask")
+            if not sub:
+                return self._error(422, "bad_request", "subtask required")
+            if sub in sess["claims"]:
+                return self._error(409, "terms_rejected",
+                                   f"already claimed by {sess['claims'][sub]}")
+            sess["claims"][sub] = m["actor"]["id"]
+            timeline_append(sess, {"kind": "claim", "visibility": ["*"],
+                                   "actor": m["actor"]["id"], "subtask": sub})
+            return self._send(200, {"subtask": sub, "claimed_by": m["actor"]["id"]})
+        if action == "spend":
+            # Atomic budget decrement with floor-at-zero. Overspend is a
+            # financial bug class — single decrement-and-check (production:
+            # same shape inside a DB transaction).
+            if sess["state"] != "active":
+                return self._error(403, "capability_denied", "spending frozen while " + sess["state"])
+            try:
+                amount = _amt(body.get("amount_usdc", "0"))
+            except ValueError as e:
+                return self._error(422, "bad_request", str(e))
+            spent = Decimal(sess["budget"]["spent_usdc"])
+            ceiling = Decimal(sess["budget"]["ceiling_usdc"])
+            if spent + amount > ceiling:
+                return self._error(422, "budget_exceeded",
+                                   f"{spent + amount} exceeds ceiling {ceiling}")
+            sess["budget"]["spent_usdc"] = str(spent + amount)
+            timeline_append(sess, {"kind": "spend", "visibility": ["*"],
+                                   "actor": m["actor"]["id"],
+                                   "amount_usdc": str(amount),
+                                   "task_ref": body.get("task_ref")})
+            return self._send(200, {"spent_usdc": sess["budget"]["spent_usdc"],
+                                   "ceiling_usdc": sess["budget"]["ceiling_usdc"]})
+        if action in ("pause", "complete", "cancel"):
+            # Spec: coordinator or approver may pause; only coordinator
+            # may complete/cancel.
+            allowed = role in ("coordinator", "approver") if action == "pause" else role == "coordinator"
+            if not allowed:
+                return self._error(403, "capability_denied",
+                                   f"role {role!r} may not {action}")
+            sess["state"] = {"pause": "paused", "complete": "completed", "cancel": "cancelled"}[action]
+            timeline_append(sess, {"kind": "session_" + sess["state"], "visibility": ["*"],
+                                   "actor": m["actor"]["id"]})
+            return self._send(200, {"id": sid, "state": sess["state"]})
+        return self._error(404, "unknown_method", f"no such session action: {action!r}")
 
 
 def serve(port: int = 8471):
