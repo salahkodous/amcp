@@ -90,7 +90,8 @@ class Directory:
             return False
 
     # -- evidence ----------------------------------------------------
-    def record_evidence(self, agent_id: str, kind: str, ref: str, outcome: str, weight_basis: str = "settlement"):
+    def record_evidence(self, agent_id: str, kind: str, ref: str, outcome: str,
+                          weight_basis: str = "settlement", reviewer: str = ""):
         if agent_id not in self.agents:
             return 404, {"error": {"code": "unknown_agent", "message": agent_id,
                                    "retryable": False, "doc": "https://amcp.dev/spec/wire#error-codes"}}
@@ -98,7 +99,8 @@ class Directory:
             return 422, {"error": {"code": "bad_request", "message": f"unknown evidence kind: {kind}",
                                    "retryable": False, "doc": "https://amcp.dev/spec/wire#error-codes"}}
         ev = {"kind": kind, "ref": ref, "outcome": outcome,
-              "weight_basis": weight_basis, "ts": now_iso()}
+              "weight_basis": weight_basis, "reviewer": reviewer or None,
+              "ts": now_iso()}
         self.evidence.setdefault(agent_id, []).append(ev)
         return 201, {"recorded": True, "evidence": ev}
 
@@ -112,6 +114,80 @@ class Directory:
                 "acceptance": (accepted / total) if total else None,
                 "trials_passed": sum(1 for e in trials if e["outcome"] == "accepted"),
                 "disputes_lost": sum(1 for e in evs if e["outcome"] in ("disputed_lost",))}
+
+    # -- reputation v1 (spec/reputation.md) ------------------------------
+    # Formalized inputs with pinned weights; reviewer graphs logged;
+    # clustering signals computed, reported, weight ZERO.
+    SCORE_VERSION = "reputation-v1"
+    SCORE_WEIGHTS = {"settlement": 0.40, "trials": 0.20, "feedback": 0.15,
+                     "validation": 0.15, "reliability": 0.10}
+
+    @staticmethod
+    def _ratio(items, pred):
+        items = list(items)
+        if not items:
+            return None
+        return sum(1 for e in items if pred(e)) / len(items)
+
+    def score(self, agent_id: str):
+        if agent_id not in self.agents:
+            return None
+        evs = self.evidence.get(agent_id, [])
+        by_kind = {}
+        for e in evs:
+            by_kind.setdefault(e["kind"], []).append(e)
+        accepted = lambda e: e["outcome"] == "accepted"  # noqa: E731
+        scores = {
+            "settlement": self._ratio(
+                [e for e in by_kind.get("receipt", []) if e["weight_basis"] == "settlement"], accepted),
+            "trials": (lambda n: min(1.0, n / 5) if evs else None)(
+                sum(1 for e in by_kind.get("trial", []) if e["outcome"] == "accepted")),
+            "feedback": self._ratio(by_kind.get("feedback", []), accepted),
+            "validation": self._ratio(by_kind.get("validation", []), accepted),
+            "reliability": (lambda r, t: 1 - r / (t + 1) if evs else None)(
+                sum(1 for e in evs if e["kind"] == "revocation"), len(evs)),
+        }
+        present = {k: v for k, v in scores.items() if v is not None}
+        composite = (sum(v * self.SCORE_WEIGHTS[k] for k, v in present.items())
+                     / sum(self.SCORE_WEIGHTS[k] for k in present)) if present else None
+        # Reviewer graph: logged, not judged. reviewer -> agents reviewed.
+        reviewers: dict = {}
+        for aid, items in self.evidence.items():
+            for e in items:
+                if e.get("reviewer"):
+                    reviewers.setdefault(e["reviewer"], set()).add(aid)
+        mine = {r for r, agents in reviewers.items() if agent_id in agents}
+        overlap = sum(len(reviewers[r]) - 1 for r in mine)
+        experimental = {
+            "weight": 0,
+            "unique_reviewers": len(mine),
+            "reviewer_overlap": overlap,
+            "burst_windows": self._burst_windows(
+                [e for e in evs if e.get("reviewer")]),
+        }
+        return {"agent_id": agent_id, "version": self.SCORE_VERSION,
+                "scores": scores, "composite": composite,
+                "experimental": experimental}
+
+    @staticmethod
+    def _burst_windows(evs):
+        # 1-hour windows with >=3 items from one reviewer.
+        from datetime import datetime, timedelta, timezone
+        by_reviewer: dict = {}
+        for e in evs:
+            try:
+                ts = datetime.fromisoformat(e["ts"].replace("Z", "+00:00"))
+            except (ValueError, KeyError):
+                continue
+            by_reviewer.setdefault(e["reviewer"], []).append(ts)
+        bursts = 0
+        for stamps in by_reviewer.values():
+            stamps.sort()
+            for i, t0 in enumerate(stamps):
+                if sum(1 for t in stamps[i:] if t - t0 <= timedelta(hours=1)) >= 3:
+                    bursts += 1
+                    break
+        return bursts
 
     # -- index + search ----------------------------------------------
     def _reindex(self):

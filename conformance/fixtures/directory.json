@@ -90,14 +90,33 @@
       "expect": {"status": 201}
     },
     {
+      "name": "record-receipt-evidence",
+      "request": {"method": "POST", "path": "/amcp/directory/evidence",
+                  "body": {"agent_id": "amcp:t:leadpro", "kind": "receipt",
+                           "ref": "rcpt-1", "outcome": "accepted", "reviewer": "0xbuyer0"}},
+      "expect": {"status": 201}
+    },
+    {
+      "name": "score-breakdown",
+      "request": {"method": "GET", "path": "/amcp/directory/score?agent_id=amcp:t:leadpro"},
+      "expect": {"status": 200,
+                 "where": {"version": "reputation-v1", "scores.settlement": 1.0,
+                           "experimental.weight": 0, "experimental.unique_reviewers": 1}}
+    },
+    {
+      "name": "score-unknown-404",
+      "request": {"method": "GET", "path": "/amcp/directory/score?agent_id=amcp:t:ghost"},
+      "expect": {"status": 404}
+    },
+    {
       "name": "trial-backed-outranks-copy",
       "request": {"method": "GET", "path": "/amcp/directory/search?q=qualify+sales+lead+score"},
       "expect": {"status": 200, "where": {"data.0.descriptor.id": "amcp:t:leadpro"}}
     },
     {
-      "name": "acceptance-floor-filters-newcomers",
+      "name": "acceptance-floor-keeps-receipt-backed",
       "request": {"method": "GET", "path": "/amcp/directory/search?q=agent&min_acceptance=0.9"},
-      "expect": {"status": 200, "where": {"data": []}}
+      "expect": {"status": 200, "where": {"data.0.descriptor.id": "amcp:t:leadpro"}}
     },
     {
       "name": "pagination-limit",

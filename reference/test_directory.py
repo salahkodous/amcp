@@ -118,6 +118,48 @@ def main():
     s, r, _ = search(q="agent", min_acceptance="0.9")
     check("min_acceptance filters agents without receipts", s == 200 and r["data"] == [], s)
 
+    print("[DIR] reputation v1 + experimental signals")
+    for i in range(3):
+        call("POST", "/amcp/directory/evidence",
+             {"agent_id": "amcp:t:leadpro", "kind": "receipt", "ref": f"rcpt-{i}",
+              "outcome": "accepted", "reviewer": f"0xbuyer{i}"})
+    call("POST", "/amcp/directory/evidence",
+         {"agent_id": "amcp:t:leadpro", "kind": "feedback", "ref": "fb-1",
+          "outcome": "accepted", "reviewer": "0xbuyer0"})
+    s, sc, _ = call("GET", "/amcp/directory/score?agent_id=amcp:t:leadpro")
+    check("score version pinned", s == 200 and sc["version"] == "reputation-v1", s)
+    check("settlement sub-score perfect",
+          sc["scores"]["settlement"] == 1.0, sc["scores"])
+    check("composite blends present inputs only",
+          sc["composite"] is not None and 0.0 <= sc["composite"] <= 1.0, sc["composite"])
+    check("experimental weight zero (not load-bearing)",
+          sc["experimental"]["weight"] == 0, sc["experimental"])
+    check("reviewer graph logged",
+          sc["experimental"]["unique_reviewers"] == 3, sc["experimental"])
+    # Sybil ring: 10 fake feedbacks from one reviewer on the copy.
+    for i in range(10):
+        call("POST", "/amcp/directory/evidence",
+             {"agent_id": "amcp:t:leadcopy", "kind": "feedback", "ref": f"fake-{i}",
+              "outcome": "accepted", "reviewer": "0xsybil"})
+    s, sc2, _ = call("GET", "/amcp/directory/score?agent_id=amcp:t:leadcopy")
+    check("ring shows burst + single reviewer",
+          sc2["experimental"]["unique_reviewers"] == 1
+          and sc2["experimental"]["burst_windows"] >= 1, sc2["experimental"])
+    s, r, _ = search(q="qualify sales lead score")
+    ids = [d["descriptor"]["id"] for d in r["data"]]
+    check("ring does not outrank settlement-backed agent",
+          ids.index("amcp:t:leadpro") < ids.index("amcp:t:leadcopy"), ids)
+    # Revocation churn penalizes reliability, never silently drops.
+    call("POST", "/amcp/directory/evidence",
+         {"agent_id": "amcp:t:leadpro", "kind": "revocation", "ref": "fb-1",
+          "outcome": "revoked", "reviewer": "0xbuyer0"})
+    s, sc3, _ = call("GET", "/amcp/directory/score?agent_id=amcp:t:leadpro")
+    check("revocation lowers reliability",
+          sc3["scores"]["reliability"] < (sc["scores"]["reliability"] or 1.0),
+          (sc["scores"]["reliability"], sc3["scores"]["reliability"]))
+    s, e, _ = call("GET", "/amcp/directory/score?agent_id=amcp:t:ghost")
+    check("unknown agent scores 404", s == 404, s)
+
     print("[DIR] pagination")
     s, r, _ = search(q="agent", limit=1)
     check("limit + has_more",

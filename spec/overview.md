@@ -15,6 +15,7 @@ Normative schemas live in `../schemas/`. This directory holds the human-readable
 - [`sdk-ts.md`](sdk-ts.md) — TypeScript SDK architecture: generated types, zero-dep, Workers-compatible, fixture-gated.
 - [`runtime-rs.md`](runtime-rs.md) — Rust production runtime architecture: pure core, axum server, store trait, fixture-gated.
 - [`keys.md`](keys.md) — key lifecycle contract: active/retired/revoked states, scoped grants, rotation/revocation API, secret isolation invariant, Gate 4a test matrix.
+- [`reputation.md`](reputation.md) — reputation v1 inputs/weights, reviewer-graph instrumentation, experimental clustering posture.
 
 ## Conformance levels
 

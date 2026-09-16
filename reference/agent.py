@@ -280,6 +280,12 @@ class Handler(BaseHTTPRequestHandler):
                     cursor=qs.get("cursor", [None])[0]))
             except ValueError as e:
                 self._error(422, "bad_request", str(e)[:200])
+        elif url.path == "/amcp/directory/score":
+            qs = parse_qs(url.query)
+            scored = directory.score((qs.get("agent_id") or [""])[0])
+            if scored is None:
+                return self._error(404, "unknown_agent", "unknown agent")
+            self._send(200, scored)
         elif url.path.startswith("/amcp/session/"):
             parts = url.path.split("/")
             if len(parts) == 5 and parts[4] == "events":
@@ -317,7 +323,8 @@ class Handler(BaseHTTPRequestHandler):
                 return
             status, resp = directory.record_evidence(
                 body.get("agent_id", ""), body.get("kind", ""),
-                body.get("ref", ""), body.get("outcome", ""))
+                body.get("ref", ""), body.get("outcome", ""),
+                reviewer=body.get("reviewer", ""))
             return self._send(status, resp)
         if url.path == "/amcp/session":
             return self._session_create()
