@@ -14,6 +14,7 @@ Normative schemas live in `../schemas/`. This directory holds the human-readable
 - [`adapter.md`](adapter.md) — Track B reference mapping (Cloudflare-shaped, portable): descriptors, DO-per-session, budget ledger, approval bridge, rollout gates, module firewall.
 - [`sdk-ts.md`](sdk-ts.md) — TypeScript SDK architecture: generated types, zero-dep, Workers-compatible, fixture-gated.
 - [`runtime-rs.md`](runtime-rs.md) — Rust production runtime architecture: pure core, axum server, store trait, fixture-gated.
+- [`keys.md`](keys.md) — key lifecycle contract: active/retired/revoked states, scoped grants, rotation/revocation API, secret isolation invariant, Gate 4a test matrix.
 
 ## Conformance levels
 
