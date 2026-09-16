@@ -23,8 +23,7 @@ export interface SessionEvent {
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export class SessionClient extends AmcpClient {
-  create(args: {
-    members: { actor: { type: string; id: string }; role: string }[];
+  create(args: {    members: { actor: { type: string; id: string }; role: string }[];
     roles: Record<string, RoleDef>;
     blackboard?: Record<string, unknown>;
     budget?: { ceiling_usdc: string; scheme?: string };
@@ -33,8 +32,13 @@ export class SessionClient extends AmcpClient {
     return this.post("/amcp/session", args);
   }
 
-  view(sessionId: string, actor: string): Promise<{
-    id: string; state: string; role: string;
+  join(sessionId: string, actor: { type?: string; id: string }, role: string): Promise<{
+    role: string; snapshot: Record<string, unknown>;
+  }> {
+    return this.act(sessionId, "join", { actor, role });
+  }
+
+  view(sessionId: string, actor: string): Promise<{    id: string; state: string; role: string;
     blackboard: Record<string, unknown>; budget: Record<string, string>;
     timeline: SessionEvent[];
   }> {
