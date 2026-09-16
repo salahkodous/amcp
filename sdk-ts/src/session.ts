@@ -63,6 +63,11 @@ export class SessionClient extends AmcpClient {
     return this.act(sessionId, "spend", { actor: { id: actor }, amount_usdc, ...(task_ref ? { task_ref } : {}) });
   }
 
+  approve(sessionId: string, actor: string, approval_id: string, verdict: "approve" | "deny", rationale?: string) {
+    return this.act(sessionId, "approve", { actor: { id: actor }, approval_id, verdict,
+      ...(rationale ? { rationale } : {}) });
+  }
+
   pause(sessionId: string, actor: string) { return this.act(sessionId, "pause", { actor: { id: actor } }); }
   complete(sessionId: string, actor: string) { return this.act(sessionId, "complete", { actor: { id: actor } }); }
 

@@ -31,7 +31,29 @@ proposed → active → paused → completed | cancelled
 - Subtasks are atomically claimable: `claim → claimed_by | already_claimed`. Double-work is a protocol failure.
 - Concurrent blackboard writes resolve per `conflict_policy`: `coordinator_arbitrates` (default), `human_escalation`, `first_claim_wins` (claim races; `last_write_wins` only for commutative-declared fields).
 
+## Decision policy (default-deny thresholds)
+
+Money moves on two rails: affordable-and-routine (executes) vs novel-or-large (pauses for a human). Every session carries `decision_policy`:
+
+```text
+spend_threshold_usdc    spends above this need approval (default "1.00")
+new_spender_approval    first spend by an unknown actor needs approval (default false;
+                        production SHOULD set true)
+```
+
+Evaluation order per spend: membership → budget → policy. A triggered policy does NOT error — it returns `202 {pending: true, approval_id}` and records a `pending_approval` plus an approval-queue effect. `approve` (approver role only) re-checks the ceiling (funds may have moved) and executes; `deny` closes it. Both produce a **signed decision receipt**: `{approval_id, session_id, inputs_hash, policy, decision, principal, decided_at, result}` — attribution without pretending attribution equals prevention. Defaults stay green for demo amounts; tightening is one field.
+
 ## Escalation design (evaluator)
+
+Money moves on two rails: affordable-and-routine (executes) vs novel-or-large (pauses for a human). Every session carries `decision_policy`:
+
+```text
+spend_threshold_usdc    spends above this need approval (default "1.00")
+new_spender_approval    first spend by an unknown actor needs approval (default false;
+                        production SHOULD set true)
+```
+
+Evaluation order per spend: membership → budget → policy. A triggered policy does NOT error — it returns `202 {pending: true, approval_id}` and records a `pending_approval` plus an approval-queue effect. `approve` (approver role only) re-checks the ceiling (funds may have moved) and executes; `deny` closes it. Both produce a **signed decision receipt**: `{approval_id, session_id, inputs_hash, policy, decision, principal, decided_at, result}` — attribution without pretending attribution equals prevention. Defaults stay green for demo amounts; tightening is one field.
 
 Conflicts arrive as: claim collisions, budget disputes, member flags. The evaluator routes them by the session's frozen `conflict_policy` — it never invents policy, only executes it.
 

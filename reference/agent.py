@@ -427,6 +427,11 @@ class Handler(BaseHTTPRequestHandler):
             "budget": {"ceiling_usdc": str(ceiling), "spent_usdc": "0",
                        "scheme": (body.get("budget") or {}).get("scheme", "upto")},
             "conflict_policy": body.get("conflict_policy", "coordinator_arbitrates"),
+            "decision_policy": {"spend_threshold_usdc":
+                                str((body.get("decision_policy") or {}).get("spend_threshold_usdc", "1.00")),
+                                "new_spender_approval":
+                                bool((body.get("decision_policy") or {}).get("new_spender_approval", False))},
+            "spenders": [], "pending": {},
             "escalation": list(body.get("escalation") or []),
             "escalations": {},
             "state": "active", "timeline": [], "claims": {},
@@ -494,6 +499,17 @@ class Handler(BaseHTTPRequestHandler):
             timeline_append(sess, {"kind": "session_resumed", "visibility": ["*"],
                                    "actor": "policy:" + esc["policy"],
                                    "reason": f"escalation {esc['id']} resolved"})
+
+    def _decision_receipt(self, sess: dict, p: dict, inputs_hash: str,
+                            decision: str, m: dict, result: str) -> dict:
+        rec = {"approval_id": p["id"], "session_id": sess["id"], "inputs_hash": inputs_hash,
+               "policy": "decision-policy/v1", "decision": decision,
+               "principal": m["actor"]["id"], "decided_at": now_iso(), "result": result}
+        rec["signatures"] = {"decider": signer.sign(
+            {k: v for k, v in rec.items() if k != "signatures"})}
+        timeline_append(sess, {"kind": "approval_decided", "visibility": ["*"],
+                               "actor": m["actor"]["id"], "approval": p["id"], "decision": rec})
+        return rec
 
     def _nego_terms(self, terms: dict) -> dict:
         price = _amt(terms.get("price_usdc", "0"))
@@ -589,6 +605,25 @@ class Handler(BaseHTTPRequestHandler):
             if spent + amount > ceiling:
                 return self._error(422, "budget_exceeded",
                                    f"{spent + amount} exceeds ceiling {ceiling}")
+            # Policy rail: novel-or-large pauses for a human (202, not error).
+            pol = sess["decision_policy"]
+            over = amount > Decimal(pol["spend_threshold_usdc"])
+            novel = pol["new_spender_approval"] and m["actor"]["id"] not in sess["spenders"]
+            if over or novel:
+                aid = "appr_" + uuid.uuid4().hex[:16]
+                sess["pending"][aid] = {"id": aid, "actor": m["actor"]["id"],
+                                        "amount_usdc": str(amount),
+                                        "task_ref": body.get("task_ref"),
+                                        "reason": "over_threshold" if over else "new_spender",
+                                        "status": "open", "created_at": now_iso()}
+                timeline_append(sess, {"kind": "approval_requested", "visibility": ["*"],
+                                       "actor": m["actor"]["id"], "approval": aid,
+                                       "reason": sess["pending"][aid]["reason"],
+                                       "amount_usdc": str(amount)})
+                return self._send(202, {"pending": True, "approval_id": aid,
+                                        "reason": sess["pending"][aid]["reason"]})
+            if m["actor"]["id"] not in sess["spenders"]:
+                sess["spenders"].append(m["actor"]["id"])
             sess["budget"]["spent_usdc"] = str(spent + amount)
             timeline_append(sess, {"kind": "spend", "visibility": ["*"],
                                    "actor": m["actor"]["id"],
@@ -596,6 +631,40 @@ class Handler(BaseHTTPRequestHandler):
                                    "task_ref": body.get("task_ref")})
             return self._send(200, {"spent_usdc": sess["budget"]["spent_usdc"],
                                    "ceiling_usdc": sess["budget"]["ceiling_usdc"]})
+        if action == "approve":
+            # Resolve a pending spend. Approver role only; ceiling re-checked;
+            # both paths mint a signed decision receipt (attribution, not prevention).
+            p = sess["pending"].get(body.get("approval_id", ""))
+            if not p:
+                return self._error(404, "unknown_agent", "unknown approval for this session")
+            if p["status"] != "open":
+                return self._error(409, "terms_rejected", f"approval is {p['status']}")
+            if not sess["roles"][m["role"]].get("approve"):
+                return self._error(403, "capability_denied", "spend approvals decide by approver")
+            if body.get("verdict") not in ("approve", "deny"):
+                return self._error(422, "bad_request", "verdict must be approve|deny")
+            inputs_hash = "sha256:" + sha256_hex(canonical(
+                {"actor": p["actor"], "amount_usdc": p["amount_usdc"], "task_ref": p.get("task_ref")}))
+            if body["verdict"] == "deny":
+                p["status"] = "denied"
+                rec = self._decision_receipt(sess, p, inputs_hash, "deny", m, body.get("rationale", "denied"))
+                return self._send(200, {"approval_id": p["id"], "status": "denied", "receipt": rec})
+            amt = Decimal(p["amount_usdc"])
+            if Decimal(sess["budget"]["spent_usdc"]) + amt > Decimal(sess["budget"]["ceiling_usdc"]):
+                p["status"] = "denied"
+                rec = self._decision_receipt(sess, p, inputs_hash, "deny", m, "ceiling_moved")
+                return self._send(200, {"approval_id": p["id"], "status": "denied", "receipt": rec})
+            p["status"] = "approved"
+            if p["actor"] not in sess["spenders"]:
+                sess["spenders"].append(p["actor"])
+            sess["budget"]["spent_usdc"] = str(Decimal(sess["budget"]["spent_usdc"]) + amt)
+            timeline_append(sess, {"kind": "spend", "visibility": ["*"], "actor": p["actor"],
+                                   "amount_usdc": p["amount_usdc"], "task_ref": p.get("task_ref"),
+                                   "approval": p["id"]})
+            rec = self._decision_receipt(sess, p, inputs_hash, "approve", m,
+                                         sess["budget"]["spent_usdc"])
+            return self._send(200, {"approval_id": p["id"], "status": "approved",
+                                    "receipt": rec, "spent_usdc": sess["budget"]["spent_usdc"]})
         if action == "escalate":
             # Raise a dispute. human_escalation freezes scope by pausing the
             # session (reuses tested pause machinery); first_claim_wins

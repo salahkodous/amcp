@@ -78,6 +78,31 @@
       "expect": {"status": 422, "where": {"error.code": "budget_exceeded"}}
     },
     {
+      "name": "over-threshold-spend-pends",
+      "request": {"method": "POST", "path": "/amcp/session/{sid}/spend",
+                  "body": {"actor": {"id": "amcp:t:worker"}, "amount_usdc": "1.50"}},
+      "capture": {"aid": "approval_id"},
+      "expect": {"status": 202, "where": {"pending": true, "reason": "over_threshold"}}
+    },
+    {
+      "name": "worker-cannot-approve",
+      "request": {"method": "POST", "path": "/amcp/session/{sid}/approve",
+                  "body": {"actor": {"id": "amcp:t:worker"}, "approval_id": "{aid}", "verdict": "approve"}},
+      "expect": {"status": 403}
+    },
+    {
+      "name": "approver-executes-pending-spend",
+      "request": {"method": "POST", "path": "/amcp/session/{sid}/approve",
+                  "body": {"actor": {"id": "user:t"}, "approval_id": "{aid}", "verdict": "approve"}},
+      "expect": {"status": 200, "where": {"status": "approved", "spent_usdc": "1.90"}}
+    },
+    {
+      "name": "double-approval-refused",
+      "request": {"method": "POST", "path": "/amcp/session/{sid}/approve",
+                  "body": {"actor": {"id": "user:t"}, "approval_id": "{aid}", "verdict": "approve"}},
+      "expect": {"status": 409}
+    },
+    {
       "name": "worker-cannot-pause",
       "request": {"method": "POST", "path": "/amcp/session/{sid}/pause",
                   "body": {"actor": {"id": "amcp:t:worker"}}},

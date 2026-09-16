@@ -12,7 +12,7 @@ import urllib.error
 
 sys.path.insert(0, ".")
 from jsonschema import Draft202012Validator  # noqa: E402
-from reference.agent import ThreadingHTTPServer, Handler  # noqa: E402
+from reference.agent import ThreadingHTTPServer, Handler, verify_envelope  # noqa: E402
 
 BASE = "http://127.0.0.1:8481"
 PASS, FAIL = 0, 0
@@ -103,6 +103,26 @@ def main():
     s, e, _ = call("POST", f"/amcp/session/{sid}/spend",
                    {"actor": {"id": "amcp:t:worker"}, "amount_usdc": "5.00"})
     check("overspend refused", s == 422 and e["error"]["code"] == "budget_exceeded", (s, e))
+
+    print("[L3] decision policy (default-deny thresholds)")
+    s, p, _ = call("POST", f"/amcp/session/{sid}/spend",
+                   {"actor": {"id": "amcp:t:worker"}, "amount_usdc": "1.50"})
+    check("over-threshold spend pends (202)", s == 202 and p.get("pending") is True, (s, p))
+    aid = p["approval_id"]
+    s, e, _ = call("POST", f"/amcp/session/{sid}/approve",
+                   {"actor": {"id": "amcp:t:worker"}, "approval_id": aid, "verdict": "approve"})
+    check("worker cannot approve", s == 403, s)
+    s, d, _ = call("POST", f"/amcp/session/{sid}/approve",
+                   {"actor": {"id": "user:t"}, "approval_id": aid, "verdict": "approve"})
+    check("approver executes pending spend",
+          s == 200 and d["status"] == "approved" and d["spent_usdc"] == "1.90", (s, d))
+    rec = d["receipt"]
+    check("decision receipt verifies",
+          verify_envelope({k: v for k, v in rec.items() if k != "signatures"},
+                          rec["signatures"]["decider"]))
+    s, e, _ = call("POST", f"/amcp/session/{sid}/approve",
+                   {"actor": {"id": "user:t"}, "approval_id": aid, "verdict": "approve"})
+    check("double approval refused", s == 409, s)
 
     print("[L3] pause + lifecycle")
     s, e, _ = call("POST", f"/amcp/session/{sid}/pause", {"actor": {"id": "amcp:t:worker"}})
