@@ -30,7 +30,15 @@ curl 'localhost:8471/amcp/receipts?limit=5' | python -m json.tool
 ```bash
 python reference/test_conformance.py   # L0–L2 subset: 11 checks
 python reference/test_sessions.py      # L3 subset: 19 checks (roles, canaries, claims, budgets, lifecycle)
+python reference/test_directory.py     # directory: 13 checks (submit, ranking, filters, evidence re-rank, pagination)
 ```
+
+## Directory (demo deployment, same server)
+
+`POST /amcp/directory/submit` (shape-validated; optional `check_liveness` challenge: serves-back-same-id) ·
+`POST /amcp/directory/evidence` (receipt/feedback/validation/revocation/trial) ·
+`GET /amcp/directory/search` (filters → TF-IDF cosine → reputation re-rank with `match_explanation`).
+Trial history outranks prose by construction. Production swaps TF-IDF for embeddings + LLM re-rank behind the identical response shape.
 
 ## What's real vs stubbed
 

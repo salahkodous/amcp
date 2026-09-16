@@ -48,6 +48,12 @@ class Store:
 store = Store()
 signer = DevSigner(b"dev-secret-change-me")
 
+try:
+    from .directory import Directory  # noqa: E402
+except ImportError:  # pragma: no cover — direct script execution fallback
+    from directory import Directory  # type: ignore[no-redef]
+directory = Directory()
+
 
 CAPABILITIES = {
     "echo": {
@@ -211,6 +217,18 @@ class Handler(BaseHTTPRequestHandler):
             items = store.receipts[-limit:][::-1]
             self._send(200, {"data": items,
                              "pagination": {"next_cursor": None, "has_more": False}})
+        elif url.path == "/amcp/directory/search":
+            qs = parse_qs(url.query)
+            try:
+                self._send(200, directory.search(
+                    q=qs.get("q", [""])[0], domain=(qs.get("domain", [None])[0]),
+                    capability=(qs.get("capability", [None])[0]),
+                    max_price_usdc=(qs.get("max_price_usdc", [None])[0]),
+                    min_acceptance=(qs.get("min_acceptance", [None])[0]),
+                    limit=int(qs.get("limit", ["20"])[0]),
+                    cursor=qs.get("cursor", [None])[0]))
+            except ValueError as e:
+                self._error(422, "bad_request", str(e)[:200])
         elif url.path.startswith("/amcp/session/"):
             # GET /amcp/session/<id>?actor=<member-id> — role-scoped view
             sid = url.path.split("/")[3] if len(url.path.split("/")) > 3 else ""
@@ -234,6 +252,21 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         url = urlparse(self.path)
+        if url.path == "/amcp/directory/submit":
+            body = self._sess_body()
+            if body is None:
+                return
+            status, resp = directory.submit(
+                body.get("descriptor") or {}, check_liveness=bool(body.get("check_liveness")))
+            return self._send(status, resp)
+        if url.path == "/amcp/directory/evidence":
+            body = self._sess_body()
+            if body is None:
+                return
+            status, resp = directory.record_evidence(
+                body.get("agent_id", ""), body.get("kind", ""),
+                body.get("ref", ""), body.get("outcome", ""))
+            return self._send(status, resp)
         if url.path == "/amcp/session":
             return self._session_create()
         if url.path.startswith("/amcp/session/"):
