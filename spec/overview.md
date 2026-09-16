@@ -9,6 +9,7 @@ Normative schemas live in `../schemas/`. This directory holds the human-readable
 - [`security.md`](security.md) — threat model (T1–T8), envelope classification, tokens, kill switch, audit.
 - [`wire.md`](wire.md) — versioning, errors, pagination, idempotency, rate limits, time. Pairwise flows in ≤3 round trips.
 - [`streaming.md`](streaming.md) — SSE fan-out design: timeline-as-log, serve-time redaction, resume cursors, writer-never-blocks backpressure.
+- [`economy.md`](economy.md) — purpose in the 2026 agent stack, expert-grounded alignment deltas (MPP/AP2/ERC-8004/NANDA/wallets), what AMCP owns, economy-driven build order.
 - [`directory.md`](directory.md) — directory services, data model, abuse economics, neutrality, scale envelope.
 - [`adapter.md`](adapter.md) — Track B reference mapping (Cloudflare-shaped, portable): descriptors, DO-per-session, budget ledger, approval bridge, rollout gates, module firewall.
 - [`sdk-ts.md`](sdk-ts.md) — TypeScript SDK architecture: generated types, zero-dep, Workers-compatible, fixture-gated.
