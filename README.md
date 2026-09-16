@@ -12,11 +12,26 @@ AMCP is the interoperability layer for the **any-agent-to-any-agent economy**: a
 
 ```text
 schemas/      Normative JSON Schemas (draft 2020-12): descriptor, contract, session, receipt, part
-spec/         Human-readable spec: overview, sessions, settlement, security, wire hygiene
+spec/         Human-readable spec: overview, sessions, settlement, security, wire,
+              directory, adapter, streaming (+ escalation + keys designs)
 examples/     Valid sample documents (each validated against its schema in CI)
-conformance/  Checklist an implementation must pass to claim "AMCP-compatible"
-reference/    MIT reference agent (stdlib-only Python) + conformance subset tests — 11/11 green
+conformance/  Level checklist + portable JSON fixtures + replay.py (9/9 green)
+reference/    MIT reference agent (stdlib-only Python) — the spec oracle, frozen at amcp/0.1
+sdk-ts/       (planned) TypeScript SDK — descriptor/envelope/receipt/session client
+runtime-rs/   (planned) Rust production runtime for non-Cloudflare hosting
 ```
+
+## Conformance (fixture-first)
+
+Any implementation, any language, proves compatibility by replaying the fixtures:
+
+```bash
+python conformance/replay.py          # portable assertions, 9/9 vs the reference
+```
+
+The Python suites underneath (97 checks total, all green) test implementation behavior;
+the fixtures test the **wire contract**. Ports MUST ship an equivalent replayer before
+claiming any level. See [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## 5-minute quickstart (become findable)
 

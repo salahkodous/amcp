@@ -1,0 +1,70 @@
+{
+  "version": "0.1",
+  "fixtures": [
+    {
+      "name": "descriptor-200",
+      "request": {"method": "GET", "path": "/amcp"},
+      "capture": {"desc_id": "id"},
+      "expect": {"status": 200,
+                 "where": {"amcp_version": "0.1"},
+                 "has": ["amcp_version", "id", "capabilities", "keys"]}
+    },
+    {
+      "name": "well-known-mirrors-descriptor",
+      "request": {"method": "GET", "path": "/.well-known/amcp.json"},
+      "expect": {"status": 200, "where": {"id": "{desc_id}"}}
+    },
+    {
+      "name": "echo-executes",
+      "request": {"method": "POST", "path": "/amcp/task",
+                  "headers": {"Idempotency-Key": "test-key-001"},
+                  "body": {"capability": "echo", "inputs": {"text": "hello"}}},
+      "save_as": "echo1",
+      "expect": {"status": 200,
+                 "where": {"artifact.data.echo": "hello"},
+                 "has": ["task", "artifact", "receipt"]}
+    },
+    {
+      "name": "idempotent-replay-identical",
+      "request": {"method": "POST", "path": "/amcp/task",
+                  "headers": {"Idempotency-Key": "test-key-001"},
+                  "body": {"capability": "echo", "inputs": {"text": "hello"}}},
+      "expect": {"status": 200, "identical_to": "echo1",
+                 "headers": {"X-Idempotent-Replayed": "true"}}
+    },
+    {
+      "name": "key-reuse-different-payload-rejected",
+      "request": {"method": "POST", "path": "/amcp/task",
+                  "headers": {"Idempotency-Key": "test-key-001"},
+                  "body": {"capability": "echo", "inputs": {"text": "other"}}},
+      "expect": {"status": 422, "where": {"error.code": "idempotency_key_in_use"}}
+    },
+    {
+      "name": "unknown-capability-404",
+      "request": {"method": "POST", "path": "/amcp/task",
+                  "body": {"capability": "nope", "inputs": {}}},
+      "expect": {"status": 404, "where": {"error.code": "unknown_capability"}}
+    },
+    {
+      "name": "schema-violation-422",
+      "request": {"method": "POST", "path": "/amcp/task",
+                  "body": {"capability": "echo", "inputs": {}}},
+      "expect": {"status": 422, "where": {"error.code": "artifact_rejected"}}
+    },
+    {
+      "name": "trial-executes-with-receipt",
+      "request": {"method": "POST", "path": "/amcp/task",
+                  "body": {"capability": "score_lead",
+                           "inputs": {"lead": {"budget": 500000}},
+                           "trial": true, "price_usdc": "0.01"}},
+      "expect": {"status": 200,
+                 "where": {"receipt.trial": true},
+                 "has": ["task", "artifact", "receipt"]}
+    },
+    {
+      "name": "receipts-list-shape",
+      "request": {"method": "GET", "path": "/amcp/receipts?limit=5"},
+      "expect": {"status": 200, "has": ["data", "pagination"]}
+    }
+  ]
+}
