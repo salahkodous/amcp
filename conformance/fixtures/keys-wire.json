@@ -1,0 +1,23 @@
+{
+  "version": "0.1",
+  "fixtures": [
+    {
+      "name": "keys-endpoint-advertises-active",
+      "request": {"method": "GET", "path": "/amcp/keys"},
+      "capture": {"active_key": "active"},
+      "expect": {"status": 200, "has": ["keys", "active"]}
+    },
+    {
+      "name": "descriptor-advertises-same-key",
+      "request": {"method": "GET", "path": "/amcp"},
+      "expect": {"status": 200, "where": {"keys.0.id": "{active_key}"}}
+    },
+    {
+      "name": "task-receipt-carries-signature-envelope",
+      "request": {"method": "POST", "path": "/amcp/task",
+                  "headers": {"Idempotency-Key": "keys-wire-001"},
+                  "body": {"capability": "echo", "inputs": {"text": "sig"}}},
+      "expect": {"status": 200, "has": ["task", "artifact", "receipt"]}
+    }
+  ]
+}

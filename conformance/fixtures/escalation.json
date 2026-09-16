@@ -1,0 +1,155 @@
+{
+  "version": "0.1",
+  "fixtures": [
+    {
+      "name": "create-dispute-session",
+      "request": {"method": "POST", "path": "/amcp/session",
+                  "body": {
+                    "members": [
+                      {"actor": {"type": "agent", "id": "amcp:t:coord"}, "role": "coordinator"},
+                      {"actor": {"type": "agent", "id": "amcp:t:work"}, "role": "worker"},
+                      {"actor": {"type": "human", "id": "user:t"}, "role": "approver"}],
+                    "roles": {
+                      "coordinator": {"read": ["*"], "write": ["plan"], "message": ["*"], "delegate": true, "approve": false},
+                      "worker": {"read": ["brief"], "write": ["findings"], "message": ["room"], "delegate": false, "approve": false},
+                      "approver": {"read": ["*"], "write": [], "message": ["room"], "delegate": false, "approve": true}},
+                    "conflict_policy": "coordinator_arbitrates"}},
+      "capture": {"sid": "id"},
+      "expect": {"status": 201}
+    },
+    {
+      "name": "raise-escalation",
+      "request": {"method": "POST", "path": "/amcp/session/{sid}/escalate",
+                  "body": {"actor": {"id": "amcp:t:work"}, "kind": "flag", "refs": ["msg:12"]}},
+      "capture": {"eid": "id"},
+      "expect": {"status": 201,
+                 "where": {"state": "open", "policy": "coordinator_arbitrates"}}
+    },
+    {
+      "name": "worker-cannot-decide",
+      "request": {"method": "POST", "path": "/amcp/session/{sid}/decide",
+                  "body": {"actor": {"id": "amcp:t:work"}, "escalation_id": "{eid}",
+                           "decision": "remove"}},
+      "expect": {"status": 403}
+    },
+    {
+      "name": "coordinator-decides",
+      "request": {"method": "POST", "path": "/amcp/session/{sid}/decide",
+                  "body": {"actor": {"id": "amcp:t:coord"}, "escalation_id": "{eid}",
+                           "decision": "remove", "rationale": "off-brief"}},
+      "expect": {"status": 200,
+                 "where": {"state": "decided", "decision.outcome": "remove"}}
+    },
+    {
+      "name": "appeal-reopens-to-approver",
+      "request": {"method": "POST", "path": "/amcp/session/{sid}/decide",
+                  "body": {"actor": {"id": "amcp:t:work"}, "escalation_id": "{eid}",
+                           "appeal": true}},
+      "expect": {"status": 200, "where": {"state": "appealed"}}
+    },
+    {
+      "name": "approver-final",
+      "request": {"method": "POST", "path": "/amcp/session/{sid}/decide",
+                  "body": {"actor": {"id": "user:t"}, "escalation_id": "{eid}",
+                           "decision": "keep", "rationale": "context matters"}},
+      "expect": {"status": 200,
+                 "where": {"state": "final", "decision.outcome": "keep"}}
+    },
+    {
+      "name": "second-appeal-refused",
+      "request": {"method": "POST", "path": "/amcp/session/{sid}/decide",
+                  "body": {"actor": {"id": "amcp:t:work"}, "escalation_id": "{eid}",
+                           "appeal": true}},
+      "expect": {"status": 409}
+    },
+    {
+      "name": "create-human-escalation-session",
+      "request": {"method": "POST", "path": "/amcp/session",
+                  "body": {
+                    "members": [
+                      {"actor": {"type": "agent", "id": "amcp:t:coord"}, "role": "coordinator"},
+                      {"actor": {"type": "agent", "id": "amcp:t:work"}, "role": "worker"},
+                      {"actor": {"type": "human", "id": "user:t"}, "role": "approver"}],
+                    "roles": {
+                      "coordinator": {"read": ["*"], "write": ["plan"], "message": ["*"], "delegate": true, "approve": false},
+                      "worker": {"read": ["brief"], "write": ["findings"], "message": ["room"], "delegate": false, "approve": false},
+                      "approver": {"read": ["*"], "write": [], "message": ["room"], "delegate": false, "approve": true}},
+                    "conflict_policy": "human_escalation"}},
+      "capture": {"sid2": "id"},
+      "expect": {"status": 201}
+    },
+    {
+      "name": "human-escalation-pauses-session",
+      "request": {"method": "POST", "path": "/amcp/session/{sid2}/escalate",
+                  "body": {"actor": {"id": "amcp:t:work"}, "kind": "budget", "refs": ["spend:3"]}},
+      "capture": {"eid2": "id"},
+      "expect": {"status": 201}
+    },
+    {
+      "name": "session-paused-while-escalated",
+      "request": {"method": "GET", "path": "/amcp/session/{sid2}?actor=amcp:t:coord"},
+      "expect": {"status": 200, "where": {"state": "paused"}}
+    },
+    {
+      "name": "approver-decides-resumes",
+      "request": {"method": "POST", "path": "/amcp/session/{sid2}/decide",
+                  "body": {"actor": {"id": "user:t"}, "escalation_id": "{eid2}",
+                           "decision": "deny", "rationale": "over budget"}},
+      "expect": {"status": 200, "where": {"state": "decided"}}
+    },
+    {
+      "name": "session-active-after-decision",
+      "request": {"method": "GET", "path": "/amcp/session/{sid2}?actor=amcp:t:coord"},
+      "expect": {"status": 200, "where": {"state": "active"}}
+    },
+    {
+      "name": "create-auto-resolve-session",
+      "request": {"method": "POST", "path": "/amcp/session",
+                  "body": {
+                    "members": [
+                      {"actor": {"type": "agent", "id": "amcp:t:coord"}, "role": "coordinator"},
+                      {"actor": {"type": "agent", "id": "amcp:t:work"}, "role": "worker"}],
+                    "roles": {
+                      "coordinator": {"read": ["*"], "write": ["plan"], "message": ["*"], "delegate": true, "approve": false},
+                      "worker": {"read": ["brief"], "write": ["findings"], "message": ["room"], "delegate": false, "approve": false}},
+                    "conflict_policy": "first_claim_wins"}},
+      "capture": {"sid3": "id"},
+      "expect": {"status": 201}
+    },
+    {
+      "name": "claim-then-auto-resolve",
+      "request": {"method": "POST", "path": "/amcp/session/{sid3}/claim",
+                  "body": {"actor": {"id": "amcp:t:work"}, "subtask": "batch-9"}},
+      "expect": {"status": 200}
+    },
+    {
+      "name": "escalation-auto-resolves-to-winner",
+      "request": {"method": "POST", "path": "/amcp/session/{sid3}/escalate",
+                  "body": {"actor": {"id": "amcp:t:coord"}, "kind": "claim", "refs": ["batch-9"]}},
+      "expect": {"status": 201,
+                 "where": {"state": "decided", "decision.winner": "amcp:t:work"}}
+    },
+    {
+      "name": "expired-escalation-hits-default",
+      "request": {"method": "POST", "path": "/amcp/session/{sid}/escalate",
+                  "body": {"actor": {"id": "amcp:t:work"}, "kind": "flag",
+                           "timeout_seconds": 0}},
+      "capture": {"eid3": "id"},
+      "expect": {"status": 201}
+    },
+    {
+      "name": "late-decide-gets-safe-default",
+      "request": {"method": "POST", "path": "/amcp/session/{sid}/decide",
+                  "body": {"actor": {"id": "amcp:t:coord"}, "escalation_id": "{eid3}",
+                           "decision": "late"}},
+      "expect": {"status": 200,
+                 "where": {"state": "timed_out", "decision.outcome": "default_deny"}}
+    },
+    {
+      "name": "non-member-cannot-raise",
+      "request": {"method": "POST", "path": "/amcp/session/{sid}/escalate",
+                  "body": {"actor": {"id": "amcp:t:ghost"}, "kind": "flag"}},
+      "expect": {"status": 403}
+    }
+  ]
+}

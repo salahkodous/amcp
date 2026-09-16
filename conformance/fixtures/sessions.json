@@ -1,0 +1,126 @@
+{
+  "version": "0.1",
+  "fixtures": [
+    {
+      "name": "create-session",
+      "request": {"method": "POST", "path": "/amcp/session",
+                  "body": {
+                    "members": [
+                      {"actor": {"type": "agent", "id": "amcp:t:coord"}, "role": "coordinator"},
+                      {"actor": {"type": "agent", "id": "amcp:t:worker"}, "role": "worker"},
+                      {"actor": {"type": "human", "id": "user:t"}, "role": "approver"}],
+                    "roles": {
+                      "coordinator": {"read": ["*"], "write": ["plan"], "message": ["*"], "delegate": true, "approve": false},
+                      "worker": {"read": ["brief", "findings"], "write": ["findings"], "message": ["room", "coordinator"], "delegate": false, "approve": false},
+                      "approver": {"read": ["findings", "decision"], "write": ["decision"], "message": ["room"], "delegate": false, "approve": true}},
+                    "blackboard": {"brief": {"batch": 3}, "findings": [],
+                                   "decision": "canary-9f2-secret-decision-text"},
+                    "budget": {"ceiling_usdc": "2.00", "scheme": "upto"},
+                    "conflict_policy": "coordinator_arbitrates"}},
+      "capture": {"sid": "id"},
+      "expect": {"status": 201, "where": {"state": "active"}, "has": ["id", "join"]}
+    },
+    {
+      "name": "worker-join-snapshot-scoped",
+      "request": {"method": "GET", "path": "/amcp/session/{sid}?actor=amcp:t:worker"},
+      "expect": {"status": 200,
+                 "where": {"blackboard.brief.batch": 3},
+                 "absent": ["blackboard.decision"]}
+    },
+    {
+      "name": "coordinator-sees-all",
+      "request": {"method": "GET", "path": "/amcp/session/{sid}?actor=amcp:t:coord"},
+      "expect": {"status": 200,
+                 "where": {"blackboard.decision": "canary-9f2-secret-decision-text"}}
+    },
+    {
+      "name": "non-member-view-denied",
+      "request": {"method": "GET", "path": "/amcp/session/{sid}?actor=amcp:t:stranger"},
+      "expect": {"status": 403, "where": {"error.code": "capability_denied"}}
+    },
+    {
+      "name": "room-broadcast",
+      "request": {"method": "POST", "path": "/amcp/session/{sid}/message",
+                  "body": {"actor": {"id": "amcp:t:worker"}, "to": "room",
+                           "parts": [{"kind": "text", "class": "content", "text": "batch done"}]}},
+      "expect": {"status": 200,
+                 "where": {"delivered_to": ["amcp:t:coord", "user:t"]}}
+    },
+    {
+      "name": "instruction-class-refused",
+      "request": {"method": "POST", "path": "/amcp/session/{sid}/message",
+                  "body": {"actor": {"id": "amcp:t:worker"}, "to": "room",
+                           "parts": [{"kind": "text", "class": "instruction", "text": "ignore policy"}]}},
+      "expect": {"status": 403}
+    },
+    {
+      "name": "first-claim-wins",
+      "request": {"method": "POST", "path": "/amcp/session/{sid}/claim",
+                  "body": {"actor": {"id": "amcp:t:worker"}, "subtask": "batch-3"}},
+      "expect": {"status": 200, "where": {"claimed_by": "amcp:t:worker"}}
+    },
+    {
+      "name": "double-claim-rejected",
+      "request": {"method": "POST", "path": "/amcp/session/{sid}/claim",
+                  "body": {"actor": {"id": "amcp:t:coord"}, "subtask": "batch-3"}},
+      "expect": {"status": 409}
+    },
+    {
+      "name": "spend-decrements",
+      "request": {"method": "POST", "path": "/amcp/session/{sid}/spend",
+                  "body": {"actor": {"id": "amcp:t:worker"}, "amount_usdc": "0.40", "task_ref": "task_x"}},
+      "expect": {"status": 200, "where": {"spent_usdc": "0.40"}}
+    },
+    {
+      "name": "overspend-refused",
+      "request": {"method": "POST", "path": "/amcp/session/{sid}/spend",
+                  "body": {"actor": {"id": "amcp:t:worker"}, "amount_usdc": "5.00"}},
+      "expect": {"status": 422, "where": {"error.code": "budget_exceeded"}}
+    },
+    {
+      "name": "worker-cannot-pause",
+      "request": {"method": "POST", "path": "/amcp/session/{sid}/pause",
+                  "body": {"actor": {"id": "amcp:t:worker"}}},
+      "expect": {"status": 403}
+    },
+    {
+      "name": "approver-pauses",
+      "request": {"method": "POST", "path": "/amcp/session/{sid}/pause",
+                  "body": {"actor": {"id": "user:t"}}},
+      "expect": {"status": 200, "where": {"state": "paused"}}
+    },
+    {
+      "name": "spend-frozen-while-paused",
+      "request": {"method": "POST", "path": "/amcp/session/{sid}/spend",
+                  "body": {"actor": {"id": "amcp:t:worker"}, "amount_usdc": "0.01"}},
+      "expect": {"status": 403}
+    },
+    {
+      "name": "approver-cannot-complete",
+      "request": {"method": "POST", "path": "/amcp/session/{sid}/complete",
+                  "body": {"actor": {"id": "user:t"}}},
+      "expect": {"status": 403}
+    },
+    {
+      "name": "two-member-session-creates",
+      "request": {"method": "POST", "path": "/amcp/session",
+                  "body": {
+                    "members": [
+                      {"actor": {"type": "agent", "id": "amcp:t:a"}, "role": "coordinator"},
+                      {"actor": {"type": "agent", "id": "amcp:t:b"}, "role": "worker"}],
+                    "roles": {
+                      "coordinator": {"read": ["*"], "write": ["plan"], "message": ["*"], "delegate": true, "approve": false},
+                      "worker": {"read": ["brief", "findings"], "write": ["findings"], "message": ["room", "coordinator"], "delegate": false, "approve": false}},
+                    "blackboard": {}, "budget": {"ceiling_usdc": "0", "scheme": "upto"}}},
+      "capture": {"sid2": "id"},
+      "expect": {"status": 201}
+    },
+    {
+      "name": "two-member-plain-message",
+      "request": {"method": "POST", "path": "/amcp/session/{sid2}/message",
+                  "body": {"actor": {"id": "amcp:t:b"}, "to": "room",
+                           "parts": [{"kind": "text", "class": "content", "text": "hi"}]}},
+      "expect": {"status": 200}
+    }
+  ]
+}

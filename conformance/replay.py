@@ -21,9 +21,15 @@ BASE = f"http://127.0.0.1:{PORT}"
 def get_path(obj, dotted):
     cur = obj
     for part in dotted.split("."):
-        if not isinstance(cur, dict) or part not in cur:
+        if isinstance(cur, list) and part.isdigit():
+            idx = int(part)
+            if idx >= len(cur):
+                return (False, None)
+            cur = cur[idx]
+        elif isinstance(cur, dict) and part in cur:
+            cur = cur[part]
+        else:
             return (False, None)
-        cur = cur[part]
     return (True, cur)
 
 
@@ -59,6 +65,10 @@ def run_fixture(fx, variables, saved):
     for key in exp.get("has", []):
         if key not in body:
             fails.append(f"missing key {key!r}")
+    for path in exp.get("absent", []):
+        ok, _ = get_path(body, path)
+        if ok:
+            fails.append(f"forbidden path present: {path!r}")
     for path, want in exp.get("where", {}).items():
         want = sub(want, variables)
         ok, got = get_path(body, path)

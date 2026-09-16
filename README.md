@@ -15,7 +15,7 @@ schemas/      Normative JSON Schemas (draft 2020-12): descriptor, contract, sess
 spec/         Human-readable spec: overview, sessions, settlement, security, wire,
               directory, adapter, streaming (+ escalation + keys designs)
 examples/     Valid sample documents (each validated against its schema in CI)
-conformance/  Level checklist + portable JSON fixtures + replay.py (9/9 green)
+conformance/  Level checklist + portable JSON fixtures + replay.py (70/70 green)
 reference/    MIT reference agent (stdlib-only Python) — the spec oracle, frozen at amcp/0.1
 sdk-ts/       (planned) TypeScript SDK — descriptor/envelope/receipt/session client
 runtime-rs/   (planned) Rust production runtime for non-Cloudflare hosting
@@ -26,7 +26,7 @@ runtime-rs/   (planned) Rust production runtime for non-Cloudflare hosting
 Any implementation, any language, proves compatibility by replaying the fixtures:
 
 ```bash
-python conformance/replay.py          # portable assertions, 9/9 vs the reference
+python conformance/replay.py          # portable assertions, 70/70 vs the reference
 ```
 
 The Python suites underneath (97 checks total, all green) test implementation behavior;

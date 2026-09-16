@@ -1,0 +1,91 @@
+{
+  "version": "0.1",
+  "fixtures": [
+    {
+      "name": "create-buyer-seller-session",
+      "request": {"method": "POST", "path": "/amcp/session",
+                  "body": {
+                    "members": [
+                      {"actor": {"type": "agent", "id": "amcp:t:buyer"}, "role": "coordinator"},
+                      {"actor": {"type": "agent", "id": "amcp:t:seller"}, "role": "worker"}],
+                    "roles": {
+                      "coordinator": {"read": ["*"], "write": ["plan"], "message": ["*"], "delegate": true, "approve": false},
+                      "worker": {"read": ["brief"], "write": ["findings"], "message": ["room"], "delegate": false, "approve": false}}}},
+      "capture": {"sid": "id"},
+      "expect": {"status": 201}
+    },
+    {
+      "name": "offer-creates-open-negotiation",
+      "request": {"method": "POST", "path": "/amcp/session/{sid}/negotiate",
+                  "body": {"actor": {"id": "amcp:t:buyer"}, "op": "offer",
+                           "terms": {"price_usdc": "1.50", "scheme": "escrow",
+                                     "deliverable": "qualified-lead-batch"}}},
+      "capture": {"nid": "id"},
+      "expect": {"status": 201,
+                 "where": {"status": "open", "terms.price_usdc": "1.50"}}
+    },
+    {
+      "name": "no-self-accept",
+      "request": {"method": "POST", "path": "/amcp/session/{sid}/negotiate",
+                  "body": {"actor": {"id": "amcp:t:buyer"}, "op": "accept",
+                           "negotiation_id": "{nid}"}},
+      "expect": {"status": 403}
+    },
+    {
+      "name": "counter-supersedes-terms",
+      "request": {"method": "POST", "path": "/amcp/session/{sid}/negotiate",
+                  "body": {"actor": {"id": "amcp:t:seller"}, "op": "counter",
+                           "negotiation_id": "{nid}",
+                           "terms": {"price_usdc": "2.00", "scheme": "escrow",
+                                     "deliverable": "qualified-lead-batch"}}},
+      "expect": {"status": 200, "where": {"terms.price_usdc": "2.00"}}
+    },
+    {
+      "name": "other-party-accepts",
+      "request": {"method": "POST", "path": "/amcp/session/{sid}/negotiate",
+                  "body": {"actor": {"id": "amcp:t:buyer"}, "op": "accept",
+                           "negotiation_id": "{nid}"}},
+      "expect": {"status": 200, "where": {"status": "accepted"}}
+    },
+    {
+      "name": "closed-negotiation-rejects-counter",
+      "request": {"method": "POST", "path": "/amcp/session/{sid}/negotiate",
+                  "body": {"actor": {"id": "amcp:t:seller"}, "op": "counter",
+                           "negotiation_id": "{nid}",
+                           "terms": {"price_usdc": "1.50", "scheme": "escrow",
+                                     "deliverable": "qualified-lead-batch"}}},
+      "expect": {"status": 409}
+    },
+    {
+      "name": "second-offer-for-decline-flow",
+      "request": {"method": "POST", "path": "/amcp/session/{sid}/negotiate",
+                  "body": {"actor": {"id": "amcp:t:buyer"}, "op": "offer",
+                           "terms": {"price_usdc": "1.50", "scheme": "escrow",
+                                     "deliverable": "qualified-lead-batch"}}},
+      "capture": {"nid2": "id"},
+      "expect": {"status": 201}
+    },
+    {
+      "name": "decline-closes",
+      "request": {"method": "POST", "path": "/amcp/session/{sid}/negotiate",
+                  "body": {"actor": {"id": "amcp:t:seller"}, "op": "decline",
+                           "negotiation_id": "{nid2}"}},
+      "expect": {"status": 200, "where": {"status": "declined"}}
+    },
+    {
+      "name": "terms-without-deliverable-rejected",
+      "request": {"method": "POST", "path": "/amcp/session/{sid}/negotiate",
+                  "body": {"actor": {"id": "amcp:t:buyer"}, "op": "offer",
+                           "terms": {"price_usdc": "1"}}},
+      "expect": {"status": 422}
+    },
+    {
+      "name": "non-member-cannot-offer",
+      "request": {"method": "POST", "path": "/amcp/session/{sid}/negotiate",
+                  "body": {"actor": {"id": "amcp:t:stranger"}, "op": "offer",
+                           "terms": {"price_usdc": "1.50", "scheme": "escrow",
+                                     "deliverable": "qualified-lead-batch"}}},
+      "expect": {"status": 403}
+    }
+  ]
+}

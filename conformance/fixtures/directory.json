@@ -1,0 +1,114 @@
+{
+  "version": "0.1",
+  "fixtures": [
+    {
+      "name": "submit-lead-agent",
+      "request": {"method": "POST", "path": "/amcp/directory/submit",
+                  "body": {"descriptor": {
+                    "amcp_version": "0.1", "id": "amcp:t:leadpro", "name": "LeadPro",
+                    "description": "Qualifies sales leads and scores intent for B2B pipelines.",
+                    "version": "1.0.0",
+                    "capabilities": [{
+                      "name": "qualify_lead", "kind": "operation",
+                      "description": "Score a sales lead 0-100 with rationale.",
+                      "input_schema": {"type": "object"}, "output_schema": {"type": "object"},
+                      "authorization": "authenticated",
+                      "pricing": {"model": "per_task", "amount_usdc": "0.05", "scheme": "exact"}}],
+                    "domain": ["sales"]}}},
+      "expect": {"status": 201, "where": {"listed": "amcp:t:leadpro"}}
+    },
+    {
+      "name": "submit-legal-agent",
+      "request": {"method": "POST", "path": "/amcp/directory/submit",
+                  "body": {"descriptor": {
+                    "amcp_version": "0.1", "id": "amcp:t:lexbot", "name": "LexBot",
+                    "description": "Reviews contractor agreements for enforceability issues.",
+                    "version": "1.0.0",
+                    "capabilities": [{
+                      "name": "review_contract", "kind": "operation",
+                      "description": "Review a contract and flag risky clauses.",
+                      "input_schema": {"type": "object"}, "output_schema": {"type": "object"},
+                      "authorization": "authenticated",
+                      "pricing": {"model": "per_task", "amount_usdc": "0.40", "scheme": "escrow"}}],
+                    "domain": ["legal"]}}},
+      "expect": {"status": 201}
+    },
+    {
+      "name": "malformed-descriptor-rejected",
+      "request": {"method": "POST", "path": "/amcp/directory/submit",
+                  "body": {"descriptor": {"id": "x"}}},
+      "expect": {"status": 422}
+    },
+    {
+      "name": "lead-query-ranks-leadpro-first",
+      "request": {"method": "GET", "path": "/amcp/directory/search?q=qualify+sales+lead+score"},
+      "expect": {"status": 200,
+                 "where": {"data.0.descriptor.id": "amcp:t:leadpro",
+                           "data.0.match_explanation.matched_capabilities": ["qualify_lead"]}}
+    },
+    {
+      "name": "legal-query-ranks-lexbot-first",
+      "request": {"method": "GET", "path": "/amcp/directory/search?q=contract+review+enforceability"},
+      "expect": {"status": 200, "where": {"data.0.descriptor.id": "amcp:t:lexbot"}}
+    },
+    {
+      "name": "domain-filter",
+      "request": {"method": "GET", "path": "/amcp/directory/search?q=agent&domain=legal"},
+      "expect": {"status": 200, "where": {"data.0.descriptor.id": "amcp:t:lexbot"}}
+    },
+    {
+      "name": "price-filter-drops-expensive",
+      "request": {"method": "GET", "path": "/amcp/directory/search?q=agent&max_price_usdc=0.10"},
+      "expect": {"status": 200, "where": {"data.0.descriptor.id": "amcp:t:leadpro"}}
+    },
+    {
+      "name": "capability-filter",
+      "request": {"method": "GET", "path": "/amcp/directory/search?q=agent&capability=review_contract"},
+      "expect": {"status": 200, "where": {"data.0.descriptor.id": "amcp:t:lexbot"}}
+    },
+    {
+      "name": "submit-newcomer-copy",
+      "request": {"method": "POST", "path": "/amcp/directory/submit",
+                  "body": {"descriptor": {
+                    "amcp_version": "0.1", "id": "amcp:t:leadcopy", "name": "LeadCopy",
+                    "description": "Qualifies sales leads and scores intent for B2B pipelines.",
+                    "version": "1.0.0",
+                    "capabilities": [{
+                      "name": "qualify_lead", "kind": "operation",
+                      "description": "Score a sales lead 0-100 with rationale.",
+                      "input_schema": {"type": "object"}, "output_schema": {"type": "object"},
+                      "authorization": "authenticated",
+                      "pricing": {"model": "per_task", "amount_usdc": "0.05", "scheme": "exact"}}],
+                    "domain": ["sales"]}}},
+      "expect": {"status": 201}
+    },
+    {
+      "name": "record-trial-evidence",
+      "request": {"method": "POST", "path": "/amcp/directory/evidence",
+                  "body": {"agent_id": "amcp:t:leadpro", "kind": "trial",
+                           "ref": "trial-batch", "outcome": "accepted"}},
+      "expect": {"status": 201}
+    },
+    {
+      "name": "trial-backed-outranks-copy",
+      "request": {"method": "GET", "path": "/amcp/directory/search?q=qualify+sales+lead+score"},
+      "expect": {"status": 200, "where": {"data.0.descriptor.id": "amcp:t:leadpro"}}
+    },
+    {
+      "name": "acceptance-floor-filters-newcomers",
+      "request": {"method": "GET", "path": "/amcp/directory/search?q=agent&min_acceptance=0.9"},
+      "expect": {"status": 200, "where": {"data": []}}
+    },
+    {
+      "name": "pagination-limit",
+      "request": {"method": "GET", "path": "/amcp/directory/search?q=agent&limit=1"},
+      "capture": {"dir_cursor": "pagination.next_cursor"},
+      "expect": {"status": 200, "where": {"pagination.has_more": true}}
+    },
+    {
+      "name": "pagination-cursor-advances",
+      "request": {"method": "GET", "path": "/amcp/directory/search?q=agent&limit=1&cursor={dir_cursor}"},
+      "expect": {"status": 200}
+    }
+  ]
+}
