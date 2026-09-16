@@ -10,7 +10,9 @@ Normative schemas live in `../schemas/`. This directory holds the human-readable
 - [`wire.md`](wire.md) — versioning, errors, pagination, idempotency, rate limits, time. Pairwise flows in ≤3 round trips.
 - [`streaming.md`](streaming.md) — SSE fan-out design: timeline-as-log, serve-time redaction, resume cursors, writer-never-blocks backpressure.
 - [`directory.md`](directory.md) — directory services, data model, abuse economics, neutrality, scale envelope.
-- [`adapter.md`](adapter.md) — Track B reference mapping (Cloudflare-shaped, portable): descriptors, DO-per-session, budget ledger, approval bridge, rollout gates.
+- [`adapter.md`](adapter.md) — Track B reference mapping (Cloudflare-shaped, portable): descriptors, DO-per-session, budget ledger, approval bridge, rollout gates, module firewall.
+- [`sdk-ts.md`](sdk-ts.md) — TypeScript SDK architecture: generated types, zero-dep, Workers-compatible, fixture-gated.
+- [`runtime-rs.md`](runtime-rs.md) — Rust production runtime architecture: pure core, axum server, store trait, fixture-gated.
 
 ## Conformance levels
 

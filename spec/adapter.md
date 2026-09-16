@@ -25,6 +25,12 @@ Makes Anakin agents full AMCP citizens using only Track A primitives. Adapter co
 
 Each gate has a metric: redaction-canary rate, claim-race pass, dispute rate, settlement-reconciliation 100% (every receipt ↔ facilitator proof, daily job).
 
+## Module firewall (how Track B stays honest)
+
+- Adapter code lives in **one bounded module** (`src/amcp/`) importing `sdk-ts` — never vendored copies, never framework-coupled protocol logic.
+- **Bidirectional unknown-field rejection tests:** the adapter rejects protocol documents with unknown fields AND the SDK rejects adapter-emitted documents with Anakin-private fields. Either direction failing means the firewall is breached.
+- **Fixture replay in Anakin CI:** every rollout gate replays `conformance/fixtures/*.json` against the adapter's routes. A gate that passes without fixtures is theater.
+
 ## Production hazards (stack-specific)
 
 - **DO cost at scale:** 10k sessions × 15 members needs hibernation + snapshot discipline; load-test fan-out first.
