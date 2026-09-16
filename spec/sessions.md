@@ -29,11 +29,20 @@ proposed → active → paused → completed | cancelled
 ## Claims and conflicts
 
 - Subtasks are atomically claimable: `claim → claimed_by | already_claimed`. Double-work is a protocol failure.
-- Concurrent blackboard writes resolve per `conflict_policy`: `coordinator_arbitrates` (default), `human_decides`, `last_write_wins` (commutative-declared fields only).
+- Concurrent blackboard writes resolve per `conflict_policy`: `coordinator_arbitrates` (default), `human_escalation`, `first_claim_wins` (claim races; `last_write_wins` only for commutative-declared fields).
 
-## Escalation
+## Escalation design (evaluator)
 
-Session `escalation[]` rules evaluate on every state-changing event: `{trigger, action: require_approval|pause|notify, role, timeout_seconds, default: deny}`. Timeouts resolve to `default` (SHOULD be `deny` for spend/irreversible effects). All evaluations are timeline events.
+Conflicts arrive as: claim collisions, budget disputes, member flags. The evaluator routes them by the session's frozen `conflict_policy` — it never invents policy, only executes it.
+
+- **Record:** `{id, session_id, kind, raised_by, refs (claims/tasks), policy_snapshot, state}`. The policy snapshot is frozen at raise-time so mid-dispute edits can't move the goalposts.
+- **Policies:**
+  - `coordinator_arbitrates` → coordinator decides within timeout (default 24h); silence escalates to human approver automatically. Coordinator decisions are appealable once, to a human.
+  - `human_escalation` → affected scope (subtask/budget line) freezes immediately; approver decides; on timeout the **safe default** executes (refund unspent, split remainder, release claims) — money never hangs on human latency.
+  - `first_claim_wins` → automatic for claim races; no human involved; decision cites the winning `claimed_at`.
+- **Decision:** signed record (see `security.md` keys) appended to the timeline, affected members notified. Appeal: one round, human-only, then final.
+- **Evaluator is stateless logic over session state** — same function in reference and production; only the notification transport differs.
+- **Trigger rules:** session `escalation[]` entries evaluate on every state-changing event: `{trigger, action: require_approval|pause|notify, role, timeout_seconds, default: deny}`. Timeouts resolve to `default` (SHOULD be `deny` for spend/irreversible effects). All evaluations are timeline events.
 
 ## Collapse rule
 

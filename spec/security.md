@@ -14,3 +14,12 @@ Threats T1–T8 with mandated mitigations. "SHOULD" items are conformance-checke
 | T8 | Rogue participant at runtime | Kill switch: instant grant revocation session-wide; emergency directory delisting; revocations as signed timeline events. |
 
 Posture: zero-trust between members, least-privilege roles, human approval for irreversible/high-value effects enforced at runtime. The session timeline plus signed receipts **is** the audit trail.
+
+## Keys design (Ed25519, fail closed)
+
+Dev-HMAC receipts prove the code paths, not the security. Real signatures follow this shape:
+
+- **Advertise:** descriptor gains `keys: [{id, alg: "ed25519", pub, valid_from}]`. Rotation = append new key, keep verifying old ones for receipts inside their validity window. Key compromise = rotate + directory delist notice; old signatures stay verifiable (history must survive rotation).
+- **Sign:** canonical JSON (same canonicalization as wire hashing) over receipts, escalation decisions, delegation grants — detached `signatures: {key_id, alg, sig}`. What gets signed: anything that moves money, authority, or dispute outcomes. Nothing else (don't sign chat).
+- **Verify:** fetch counterparty descriptor → pin `key_id` → verify → check directory delist status. Unknown `alg` = reject (fail closed); algorithm agility via registry, not negotiation.
+- **Reference path:** `signer.py` gains `Ed25519Signer` behind an optional `pynacl` import. `DevSigner` stays as the zero-dep default, permanently labeled. Conformance distinguishes `signed: dev` (L0–L2 demo) from `signed: ed25519` (required for paid-work level claims) — one fixed test vector (keypair + message → expected sig) pins the implementation.

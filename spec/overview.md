@@ -8,6 +8,7 @@ Normative schemas live in `../schemas/`. This directory holds the human-readable
 - [`settlement.md`](settlement.md) — budgets (`upto`), deposits (`escrow`), acceptance→settle, receipts, disputes, refunds. x402 flows referenced, not redefined.
 - [`security.md`](security.md) — threat model (T1–T8), envelope classification, tokens, kill switch, audit.
 - [`wire.md`](wire.md) — versioning, errors, pagination, idempotency, rate limits, time. Pairwise flows in ≤3 round trips.
+- [`streaming.md`](streaming.md) — SSE fan-out design: timeline-as-log, serve-time redaction, resume cursors, writer-never-blocks backpressure.
 - [`directory.md`](directory.md) — directory services, data model, abuse economics, neutrality, scale envelope.
 - [`adapter.md`](adapter.md) — Track B reference mapping (Cloudflare-shaped, portable): descriptors, DO-per-session, budget ledger, approval bridge, rollout gates.
 
