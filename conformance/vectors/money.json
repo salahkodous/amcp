@@ -1,0 +1,19 @@
+{
+  "version": "0.1",
+  "cases": [
+    {"amount": "0", "micro": "0", "scale": 0, "print": "0"},
+    {"amount": "2.00", "micro": "2000000", "scale": 2, "print": "2.00"},
+    {"amount": "0.40", "micro": "400000", "scale": 2, "print": "0.40"},
+    {"amount": "5", "micro": "5000000", "scale": 0, "print": "5"},
+    {"amount": "0.000001", "micro": "1", "scale": 6, "print": "0.000001"},
+    {"amount": "999999.999999", "micro": "999999999999", "scale": 6, "print": "999999.999999"}
+  ],
+  "sequences": [
+    {"start": "0", "adds": ["0.10", "0.20"], "spent": "0.30"},
+    {"start": "0", "adds": ["0.40"], "spent": "0.40"},
+    {"start": "0.40", "adds": ["1.50"], "spent": "1.90"},
+    {"start": "0", "adds": ["0.10", "0.20", "0.30"], "spent": "0.60"},
+    {"start": "1.00", "adds": ["0.05"], "spent": "1.05"}
+  ],
+  "invalid": ["", "-1", "abc", "1.2345678", ".5", "1.", "0x10", "1,000", "NaN"]
+}

@@ -168,13 +168,27 @@ def execute(capability: str, inputs: dict):
 # -- sessions ----------------------------------------------------------
 
 
+AMOUNT_RE = None  # compiled lazily (see _amt)
+
+
 def _amt(s) -> Decimal:
+    # Wire format (schemas/*.json amount_usdc pattern + receipt/contract
+    # patterns): ^[0-9]+(\.[0-9]{1,6})?$ — enforced here so the reference,
+    # the TS room, and the schemas accept exactly the same strings
+    # (conformance/vectors/money.json is the shared proof).
+    global AMOUNT_RE
+    if AMOUNT_RE is None:
+        import re
+        AMOUNT_RE = re.compile(r"^[0-9]+(?:\.[0-9]{1,6})?$")
+    raw = str(s)
+    if not AMOUNT_RE.match(raw):
+        raise ValueError(f"invalid amount: {s!r}")
     try:
-        v = Decimal(str(s))
+        v = Decimal(raw)
     except (InvalidOperation, ValueError):
         raise ValueError(f"invalid amount: {s!r}")
-    if v < 0:
-        raise ValueError("amount must be >= 0")
+    if not v.is_finite() or v < 0:
+        raise ValueError(f"invalid amount: {s!r}")
     return v
 
 
