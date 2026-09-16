@@ -10,7 +10,7 @@
   "files": ["dist"],
   "scripts": {
     "build": "tsc",
-    "test": "vitest run",
+    "test": "npm run build && vitest run",
     "check": "tsc --noEmit"
   },
   "dependencies": {},
