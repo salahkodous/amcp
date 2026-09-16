@@ -32,16 +32,30 @@ function sub<T>(obj: T, vars: Record<string, unknown>): T {
 
 const deepEqual = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
 
-export async function replayFile(baseUrl: string, spec: { version: string; fixtures: unknown[] }): Promise<FixtureResult[]> {
+export interface ReplayOptions {
+  /** Override fetch (e.g. Hono app.request for in-process replay). */
+  fetchFn?: typeof fetch;
+  /** Replay only these fixture names (gate-scoped CI). */
+  only?: string[];
+}
+
+export async function replayFile(
+  baseUrl: string,
+  spec: { version: string; fixtures: unknown[] },
+  opts: ReplayOptions = {},
+): Promise<FixtureResult[]> {
   if (spec.version !== "0.1") throw new Error(`unsupported fixture version ${spec.version}`);
+  const fetchFn = opts.fetchFn ?? fetch;
   const vars: Record<string, unknown> = {};
   const saved: Record<string, unknown> = {};
   const out: FixtureResult[] = [];
-  for (const fx of spec.fixtures as Array<Record<string, any>>) {
+  const fixtures = (spec.fixtures as Array<Record<string, any>>)
+    .filter((fx) => !opts.only || opts.only.includes(fx.name));
+  for (const fx of fixtures) {
     const fails: string[] = [];
     try {
       const req = fx.request;
-      const resp = await fetch(baseUrl + sub(req.path, vars), {
+      const resp = await fetchFn(baseUrl + sub(req.path, vars), {
         method: req.method,
         headers: { "Content-Type": "application/json", ...sub(req.headers ?? {}, vars) },
         body: req.body === undefined ? undefined : JSON.stringify(sub(req.body, vars)),
