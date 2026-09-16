@@ -1,0 +1,14 @@
+{
+  "amcp_version": "0.1",
+  "contract_id": "ct_example00000001",
+  "parties": { "principal": "amcp:example:coordinator_1", "counterparty": "amcp:example:qualifier_9f2" },
+  "capability": "qualify_lead",
+  "terms_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "objective": "Qualify a batch of 50 UAE property leads.",
+  "deadline": "2026-09-16T07:00:00Z",
+  "price": { "amount_usdc": "0.40", "scheme": "escrow" },
+  "acceptance_criteria_schema": { "$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "required": ["scores"] },
+  "session_id": "sess_01JEXAMPLE0001",
+  "trial": false,
+  "signatures": { "principal": "ed25519:sig-p", "counterparty": "ed25519:sig-c" }
+}

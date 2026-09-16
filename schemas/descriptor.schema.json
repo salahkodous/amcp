@@ -1,0 +1,138 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://amcp.dev/schemas/v0.1/descriptor.schema.json",
+  "title": "AMCP Agent Descriptor",
+  "description": "Normative discovery document served at GET /amcp (and /.well-known/amcp.json). AMCP v0.1.",
+  "type": "object",
+  "required": ["amcp_version", "id", "name", "description", "version", "capabilities"],
+  "properties": {
+    "amcp_version": { "const": "0.1" },
+    "id": {
+      "type": "string",
+      "pattern": "^amcp:[a-z0-9_-]+:[A-Za-z0-9_.-]+$",
+      "description": "Stable platform-namespaced id, e.g. amcp:anakin:ag_qualifier_9f2"
+    },
+    "name": { "type": "string", "minLength": 1, "maxLength": 80 },
+    "description": { "type": "string", "minLength": 1, "maxLength": 2000 },
+    "organization": { "type": "string", "maxLength": 120 },
+    "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "public_key": { "type": "string", "description": "Ed25519 public key (multibase/base64). Absent = self-asserted, discovery-only." },
+    "key_history": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["public_key", "rotated_at"],
+        "properties": {
+          "public_key": { "type": "string" },
+          "rotated_at": { "type": "string", "format": "date-time" }
+        },
+        "additionalProperties": false
+      },
+      "default": []
+    },
+    "domain": { "type": "array", "items": { "type": "string" }, "default": [] },
+    "languages": { "type": "array", "items": { "type": "string", "pattern": "^[a-z]{2}(-[A-Z]{2})?$" }, "default": [] },
+    "context_summary": { "type": "string", "maxLength": 2000 },
+    "capabilities": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/capability" }
+    },
+    "session_roles": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Roles this agent can play in sessions (role definitions live in the session object)."
+    },
+    "settlement": {
+      "type": "object",
+      "required": ["pay_to", "networks", "schemes"],
+      "properties": {
+        "pay_to": { "type": "string", "description": "x402 payTo wallet address" },
+        "networks": { "type": "array", "minItems": 1, "items": { "type": "string", "description": "CAIP-2, e.g. eip155:8453" } },
+        "schemes": { "type": "array", "minItems": 1, "items": { "enum": ["exact", "upto", "escrow", "batch-settlement", "auth-capture"] } }
+      },
+      "additionalProperties": false
+    },
+    "reputation": {
+      "type": "object",
+      "required": ["receipts_uri", "completed_tasks", "acceptance_rate"],
+      "properties": {
+        "receipts_uri": { "type": "string", "format": "uri" },
+        "completed_tasks": { "type": "integer", "minimum": 0 },
+        "acceptance_rate": { "type": "number", "minimum": 0, "maximum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "registrations": {
+      "type": "array",
+      "description": "Bindings to external identities (e.g. ERC-8004 ERC-721 identities).",
+      "items": {
+        "type": "object",
+        "required": ["system", "ref"],
+        "properties": {
+          "system": { "type": "string", "description": "e.g. erc-8004" },
+          "ref": { "type": "string", "description": "e.g. eip155:1:0xRegistry:4471" }
+        },
+        "additionalProperties": false
+      },
+      "default": []
+    },
+    "verification": { "enum": ["self_asserted", "platform_verified", "staked"], "default": "self_asserted" },
+    "agent_card_uri": { "type": "string", "description": "A2A AgentCard location for A2A-only clients" },
+    "signature": { "type": "string", "description": "Ed25519 signature over canonical JSON of this document minus signature. Absent = self-asserted." }
+  },
+  "$defs": {
+    "capability": {
+      "type": "object",
+      "required": ["name", "kind", "description", "input_schema", "output_schema", "authorization"],
+      "properties": {
+        "name": { "type": "string", "pattern": "^[a-z][a-z0-9_]{1,63}$" },
+        "kind": { "enum": ["service", "operation", "tool", "resource", "interface", "workflow", "delegation"] },
+        "description": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "input_schema": { "type": "object" },
+        "output_schema": { "type": "object" },
+        "authorization": { "enum": ["public", "authenticated", "restricted", "approval", "private"] },
+        "pricing": {
+          "type": "object",
+          "required": ["model"],
+          "properties": {
+            "model": { "enum": ["per_task", "per_turn", "per_hour", "revenue_share", "free"] },
+            "amount_usdc": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]{1,6})?$" },
+            "scheme": { "enum": ["exact", "upto", "escrow", "batch-settlement", "auth-capture"] }
+          },
+          "additionalProperties": false,
+          "allOf": [
+            { "if": { "properties": { "model": { "const": "free" } } }, "then": { "not": { "required": ["amount_usdc"] } } },
+            { "if": { "properties": { "model": { "not": { "const": "free" } } } }, "then": { "required": ["amount_usdc", "scheme"] } }
+          ]
+        },
+        "egress_usdc_per_gb": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]{1,6})?$", "description": "Priced data egress; absent = egress included" },
+        "rate_limit": {
+          "type": "object",
+          "required": ["per_minute"],
+          "properties": { "per_minute": { "type": "integer", "minimum": 1 } },
+          "additionalProperties": false
+        },
+        "sla": {
+          "type": "object",
+          "properties": {
+            "p50_seconds": { "type": "number", "minimum": 0 },
+            "timeout_seconds": { "type": "number", "minimum": 1 }
+          },
+          "additionalProperties": false
+        },
+        "trial": {
+          "type": "object",
+          "required": ["offered"],
+          "properties": {
+            "offered": { "type": "boolean" },
+            "price_usdc": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]{1,6})?$" },
+            "scope": { "type": "string", "maxLength": 500 }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://amcp.dev/schemas/v0.1/part.schema.json",
+  "title": "AMCP Part",
+  "description": "Content unit for messages and artifacts. Extends A2A Part (text|file|data) with class, schema binding, visibility, provenance, retention. AMCP v0.1.",
+  "type": "object",
+  "required": ["kind", "class"],
+  "properties": {
+    "kind": { "enum": ["text", "data", "file", "dataset", "stream", "code", "credential_ref", "embedding", "receipt", "verdict"] },
+    "class": { "enum": ["instruction", "content", "evidence"], "description": "content: untrusted by default. instruction: authorized+signed actors only. evidence: immutable, content-addressed." },
+    "schema": { "type": "string", "description": "JSON Schema URI or inline schema id for data/dataset parts" },
+    "mime_type": { "type": "string" },
+    "filename": { "type": "string" },
+    "text": { "type": "string" },
+    "data": {},
+    "file": {
+      "type": "object",
+      "properties": {
+        "bytes": { "type": "string", "description": "base64, <=4MB" },
+        "uri": { "type": "string", "format": "uri" }
+      },
+      "additionalProperties": false
+    },
+    "ref": { "type": "string", "description": "By-reference URI for dataset/stream/credential_ref/file parts" },
+    "cursor": { "type": ["string", "null"], "description": "Pagination cursor for dataset pages" },
+    "content_hash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "provenance": {
+      "type": "object",
+      "required": ["producer"],
+      "properties": {
+        "producer": { "type": "string" },
+        "task_ref": { "type": "string" },
+        "derived_from": { "type": "array", "items": { "type": "string" }, "default": [] }
+      },
+      "additionalProperties": false
+    },
+    "visibility": { "type": "array", "items": { "type": "string" }, "description": "Role list or ['public']. Defaults to sender role-slice." },
+    "retention": {
+      "type": "object",
+      "properties": {
+        "until": { "type": "string", "format": "date-time" },
+        "on_complete": { "enum": ["purge", "archive", "handoff"] }
+      },
+      "additionalProperties": false
+    },
+    "metadata": { "type": "object", "default": {} }
+  },
+  "allOf": [
+    { "if": { "properties": { "kind": { "const": "credential_ref" } } }, "then": { "required": ["ref"], "not": { "anyOf": [{ "required": ["text"] }, { "required": ["data"] }, { "required": ["file"] }] } } }
+  ]
+}

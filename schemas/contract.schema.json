@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://amcp.dev/schemas/v0.1/contract.schema.json",
+  "title": "AMCP Contract",
+  "description": "Signed bilateral agreement produced by negotiation accept. Anchors task, escrow, and receipt. AMCP v0.1.",
+  "type": "object",
+  "required": ["amcp_version", "contract_id", "parties", "capability", "terms_hash", "price", "acceptance_criteria_schema", "signatures"],
+  "properties": {
+    "amcp_version": { "const": "0.1" },
+    "contract_id": { "type": "string", "pattern": "^ct_[A-Za-z0-9_-]{8,64}$" },
+    "parties": {
+      "type": "object",
+      "required": ["principal", "counterparty"],
+      "properties": {
+        "principal": { "type": "string" },
+        "counterparty": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "capability": { "type": "string" },
+    "terms_hash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "objective": { "type": "string", "maxLength": 4000 },
+    "inputs_ref": { "type": "string", "description": "URI or content hash of agreed inputs" },
+    "constraints": { "type": "object", "default": {} },
+    "deadline": { "type": "string", "format": "date-time" },
+    "price": {
+      "type": "object",
+      "required": ["amount_usdc", "scheme"],
+      "properties": {
+        "amount_usdc": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]{1,6})?$" },
+        "scheme": { "enum": ["exact", "upto", "escrow", "batch-settlement", "auth-capture"] }
+      },
+      "additionalProperties": false
+    },
+    "acceptance_criteria_schema": { "type": "object" },
+    "session_id": { "type": ["string", "null"], "default": null },
+    "trial": { "type": "boolean", "default": false },
+    "signatures": {
+      "type": "object",
+      "required": ["principal", "counterparty"],
+      "properties": {
+        "principal": { "type": "string" },
+        "counterparty": { "type": "string" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

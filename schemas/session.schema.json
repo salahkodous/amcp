@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://amcp.dev/schemas/v0.1/session.schema.json",
+  "title": "AMCP Session",
+  "description": "Bounded multi-party collaboration: members, roles, scoped blackboard, budget, timeline pointer. AMCP v0.1.",
+  "type": "object",
+  "required": ["amcp_version", "id", "members", "roles", "blackboard", "budget", "conflict_policy", "state"],
+  "properties": {
+    "amcp_version": { "const": "0.1" },
+    "id": { "type": "string", "pattern": "^sess_[A-Za-z0-9_-]{8,64}$" },
+    "contract_id": { "type": ["string", "null"], "default": null },
+    "members": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["actor", "role", "joined_at", "presence"],
+        "properties": {
+          "actor": {
+            "type": "object",
+            "required": ["type", "id"],
+            "properties": {
+              "type": { "enum": ["agent", "human"] },
+              "id": { "type": "string" }
+            },
+            "additionalProperties": false
+          },
+          "role": { "type": "string" },
+          "joined_at": { "type": "string", "format": "date-time" },
+          "presence": { "enum": ["active", "away", "offline"] }
+        },
+        "additionalProperties": false
+      }
+    },
+    "roles": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "required": ["read", "write", "message", "delegate", "approve"],
+        "properties": {
+          "read": { "type": "array", "items": { "type": "string" } },
+          "write": { "type": "array", "items": { "type": "string" } },
+          "message": { "type": "array", "items": { "type": "string" } },
+          "delegate": { "type": "boolean" },
+          "approve": { "type": "boolean" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "blackboard": { "type": "object" },
+    "budget": {
+      "type": "object",
+      "required": ["ceiling_usdc", "spent_usdc", "scheme"],
+      "properties": {
+        "ceiling_usdc": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]{1,6})?$" },
+        "spent_usdc": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]{1,6})?$" },
+        "scheme": { "enum": ["upto", "escrow", "exact"] }
+      },
+      "additionalProperties": false
+    },
+    "conflict_policy": { "enum": ["coordinator_arbitrates", "human_decides", "last_write_wins"] },
+    "escalation": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "object",
+        "required": ["trigger", "action", "role", "default"],
+        "properties": {
+          "trigger": { "type": "string" },
+          "action": { "enum": ["require_approval", "pause", "notify"] },
+          "role": { "type": "string" },
+          "timeout_seconds": { "type": "integer", "minimum": 1 },
+          "default": { "enum": ["deny", "allow"] }
+        },
+        "additionalProperties": false
+      }
+    },
+    "state": { "enum": ["proposed", "active", "paused", "completed", "cancelled"] }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,22 @@
+{
+  "amcp_version": "0.1",
+  "id": "sess_01JEXAMPLE0001",
+  "contract_id": "ct_example00000001",
+  "members": [
+    { "actor": { "type": "agent", "id": "amcp:example:coordinator_1" }, "role": "coordinator", "joined_at": "2026-09-16T06:00:00Z", "presence": "active" },
+    { "actor": { "type": "agent", "id": "amcp:example:qualifier_9f2" }, "role": "worker", "joined_at": "2026-09-16T06:00:10Z", "presence": "active" },
+    { "actor": { "type": "human", "id": "user:owner" }, "role": "approver", "joined_at": "2026-09-16T06:00:05Z", "presence": "active" }
+  ],
+  "roles": {
+    "coordinator": { "read": ["*"], "write": ["plan", "assignments"], "message": ["*"], "delegate": true, "approve": false },
+    "worker": { "read": ["brief", "findings"], "write": ["findings"], "message": ["room", "coordinator"], "delegate": false, "approve": false },
+    "approver": { "read": ["findings", "decision"], "write": ["decision"], "message": ["room"], "delegate": false, "approve": true }
+  },
+  "blackboard": { "brief": { "market": "UAE", "batch": 50 }, "findings": [], "decision": null },
+  "budget": { "ceiling_usdc": "2.00", "spent_usdc": "0.00", "scheme": "upto" },
+  "conflict_policy": "coordinator_arbitrates",
+  "escalation": [
+    { "trigger": "amount_usdc > 1 OR irreversible == true", "action": "require_approval", "role": "approver", "timeout_seconds": 3600, "default": "deny" }
+  ],
+  "state": "active"
+}

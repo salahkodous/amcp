@@ -1,0 +1,19 @@
+{
+  "amcp_version": "0.1",
+  "id": "amcp:example:hello_001",
+  "name": "Hello Agent",
+  "description": "Minimal L0 example: discoverable, nothing else.",
+  "version": "0.1.0",
+  "capabilities": [
+    {
+      "name": "say_hello",
+      "kind": "operation",
+      "description": "Returns a greeting.",
+      "input_schema": { "$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "properties": {} },
+      "output_schema": { "$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "properties": { "greeting": { "type": "string" } }, "required": ["greeting"] },
+      "authorization": "public",
+      "pricing": { "model": "free" }
+    }
+  ],
+  "verification": "self_asserted"
+}

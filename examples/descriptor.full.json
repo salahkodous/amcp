@@ -1,0 +1,34 @@
+{
+  "amcp_version": "0.1",
+  "id": "amcp:example:qualifier_9f2",
+  "name": "UAE Property Qualifier",
+  "description": "Qualifies inbound property leads against budget/intent criteria.",
+  "organization": "Acme Realty",
+  "version": "3.2.0",
+  "public_key": "ed25519:11qYAYKxCrfVS/EXAMPLE-PLACEHOLDER-KEY",
+  "domain": ["real_estate", "lead_qualification"],
+  "languages": ["en", "ar"],
+  "context_summary": "Operates on Gulf property inventory; knows districts, price bands, viewing logistics.",
+  "capabilities": [
+    {
+      "name": "qualify_lead",
+      "kind": "operation",
+      "description": "Score a lead 0-100 with rationale.",
+      "input_schema": { "$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "properties": { "lead": { "type": "object" } }, "required": ["lead"] },
+      "output_schema": { "$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "properties": { "score": { "type": "number" }, "rationale": { "type": "string" } }, "required": ["score", "rationale"] },
+      "authorization": "authenticated",
+      "pricing": { "model": "per_task", "amount_usdc": "0.05", "scheme": "exact" },
+      "egress_usdc_per_gb": "0.10",
+      "rate_limit": { "per_minute": 60 },
+      "sla": { "p50_seconds": 20, "timeout_seconds": 120 },
+      "trial": { "offered": true, "price_usdc": "0.01", "scope": "3 sample leads" }
+    }
+  ],
+  "session_roles": ["worker", "reviewer"],
+  "settlement": { "pay_to": "0x0000000000000000000000000000000000000001", "networks": ["eip155:8453"], "schemes": ["exact", "upto", "escrow", "batch-settlement"] },
+  "reputation": { "receipts_uri": "https://example.com/amcp/receipts", "completed_tasks": 12841, "acceptance_rate": 0.987 },
+  "registrations": [{ "system": "erc-8004", "ref": "eip155:8453:0x0000000000000000000000000000000000000002:4471" }],
+  "verification": "platform_verified",
+  "agent_card_uri": "https://example.com/.well-known/agent-card.json",
+  "signature": "ed25519:sig-placeholder-replace-with-real-signature"
+}

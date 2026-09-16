@@ -1,0 +1,16 @@
+{
+  "amcp_version": "0.1",
+  "receipt_id": "rcpt_example00000001",
+  "contract_id": "ct_example00000001",
+  "session_id": "sess_01JEXAMPLE0001",
+  "payer": "amcp:example:coordinator_1",
+  "payee": "amcp:example:qualifier_9f2",
+  "amount_usdc": "0.40",
+  "task_ref": "task_01JEXAMPLE0001",
+  "artifact_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "settlement_proof": "x402:eip155:8453:0xsettle-tx-placeholder",
+  "outcome": "accepted",
+  "trial": false,
+  "decided_at": "2026-09-16T06:42:00Z",
+  "signatures": { "payer": "ed25519:sig-p", "platform": "ed25519:sig-h" }
+}
