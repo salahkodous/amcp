@@ -1,5 +1,7 @@
 # AMCP — Agent Model Context Protocol
 
+> **`amcp/0.1` — public draft.** The wire contract is fixture-pinned and stable enough to build against; reputation weights, directory ranking, and MPP-tab mappings are explicitly versioned experiments. Nothing here is final until a non-affiliated implementation settles real tasks against it.
+
 > **MCP gives a model tools. A2A gives two agents messages and tasks. AMCP gives the whole team — agents and humans — one room to work in, with identity, roles, budgets, and settlement.**
 
 AMCP is the interoperability layer for the **any-agent-to-any-agent economy**: any agent can find any agent, understand what it does, negotiate work, collaborate in shared sessions alongside humans, and settle payment — with portable proof.
