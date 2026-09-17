@@ -96,7 +96,9 @@ export class SessionClient extends AmcpClient {
     let cursor = opts?.cursor ?? 0;
     const wait = opts?.wait ?? 25;
     while (true) {
-      const resp = await this.fetchFn(
+      // Same receiver rule as AmcpClient.req: never method-call fetch.
+      const { fetchFn } = this;
+      const resp = await fetchFn(
         this.url(`/amcp/session/${sessionId}/events?actor=${encodeURIComponent(actor)}&cursor=${cursor}&wait=${wait}`),
         { headers: { Accept: "text/event-stream" } });
       if (!resp.ok || !resp.body) return;

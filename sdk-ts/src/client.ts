@@ -25,7 +25,11 @@ export class AmcpClient {
   }
 
   protected async req<T>(method: string, path: string, body?: unknown, extraHeaders?: Record<string, string>): Promise<{ body: T; headers: Headers }> {
-    const resp = await this.fetchFn(this.url(path), {
+    // Never call fetch as a method (this.fetchFn(...)): the Workers runtime
+    // brand-checks fetch and throws "Illegal invocation" — green in Node,
+    // dead at the edge. Destructure first so the receiver is undefined.
+    const { fetchFn } = this;
+    const resp = await fetchFn(this.url(path), {
       method,
       headers: { "Content-Type": "application/json", ...this.headers, ...extraHeaders },
       body: body === undefined ? undefined : JSON.stringify(body),
