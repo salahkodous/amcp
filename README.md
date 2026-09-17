@@ -17,7 +17,7 @@ spec/         Human-readable spec: overview, sessions, settlement, security, wir
 examples/     Valid sample documents (each validated against its schema in CI)
 conformance/  Level checklist + portable JSON fixtures + replay.py (77/77 green)
 reference/    MIT reference agent (stdlib-only Python) — the spec oracle, frozen at amcp/0.1
-sdk-ts/       TypeScript SDK (@amcp/sdk, zero-dep): clients + fixture replayer, 18/18 tests green
+sdk-ts/       TypeScript SDK (@amcp/sdk, zero-dep): clients + fixture replayer, 24/24 tests green
 runtime-rs/   (planned) Rust production runtime for non-Cloudflare hosting
 ```
 

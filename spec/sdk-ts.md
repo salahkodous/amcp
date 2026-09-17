@@ -15,11 +15,15 @@ sdk-ts/
     session.ts    Session client: join/views with role scoping, claims, budgets,
                   negotiate, escalate, SSE stream with resume cursors
     directory.ts  Directory client: submit, search with typed filters
+    reputation.ts Portable offline reputation-v1 scorer over caller-supplied
+                  active evidence; retained-but-unscoreable rows are excluded
     errors.ts     Wire error taxonomy (one class per code in spec/wire.md)
     replay.ts     Fixture replayer (conformance/fixtures/*.json) — the gate
   test/
     fixtures.test.ts  Replays every fixture file against the Python reference
                       in CI (cross-language proof from day one)
+    reputation.test.ts Scores every shared reputation vector and checks that
+                       retained-but-unscoreable evidence stays out of v1
 ```
 
 ## Non-negotiable constraints

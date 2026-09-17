@@ -10,6 +10,8 @@ export { SessionClient } from "./session.js";
 export type { RoleDef, SessionEvent } from "./session.js";
 export { DirectoryClient } from "./directory.js";
 export type { SearchFilters } from "./directory.js";
+export { SCORE_VERSION, SCORE_WEIGHTS, burstWindows, scoreAgent } from "./reputation.js";
+export type { ReputationEvidence, ReputationExperimental, ReputationScore, ReputationScoreKey } from "./reputation.js";
 export { replayFile } from "./replay.js";
 export type { FixtureResult } from "./replay.js";
 export type * from "./types.js";
