@@ -10,6 +10,7 @@ sys.path.insert(0, ".")
 from reference.agent import _amt  # noqa: E402
 from reference.directory import Directory  # noqa: E402
 from reference import authorization as authz  # noqa: E402
+from reference import verification as vfy  # noqa: E402
 
 PASS, FAIL = 0, 0
 vec = json.load(open("conformance/vectors/money.json"))
@@ -84,6 +85,12 @@ _NOW = datetime.fromisoformat(dlg["now"].replace("Z", "+00:00")).astimezone(time
 for case in dlg["cases"]:
     got = authz.evaluate(case["chain"], case["request"], _NOW)
     check(f"delegation {case['name']}", got == case["expected"], f"{got} != {case['expected']}" if got != case["expected"] else "")
+
+ver = json.load(open("conformance/vectors/verification.json"))
+assert ver["version"] == vfy.VERSION, "vector/verifier version drift"
+for case in ver["cases"]:
+    errs = vfy.check_schema(case["schema"], case["instance"])
+    check(f"verification {case['name']}", (not errs) == case["valid"], f"{errs} != valid={case['valid']}")
 
 print(f"{PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)

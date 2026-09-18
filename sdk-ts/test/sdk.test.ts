@@ -8,6 +8,7 @@ import { canonicalJson, verifyEd25519, TEST_VECTOR } from "../src/envelope.js";
 import { IdentityClient } from "../src/descriptor.js";
 import { TaskClient } from "../src/task.js";
 import { DisputeClient } from "../src/dispute.js";
+import { VerifyClient } from "../src/verify.js";
 import { SessionClient } from "../src/session.js";
 import { AmcpError } from "../src/errors.js";
 
@@ -74,6 +75,24 @@ describe("disputes", () => {
     expect(done.state).toBe("resolved");
     const record = await disputes.read(filed.dispute_id);
     expect(record.dispute.outcome).toBe("conceded");
+  });
+});
+
+describe("verification", () => {
+  it("accepts honest artifacts, rejects tampered ones", async () => {
+    const verify = new VerifyClient({ baseUrl: BASE });
+    const good = await verify.run({
+      capability: "echo", inputs: { text: "sdk verify" },
+      artifact: { data: { echo: "sdk verify" } },
+    });
+    expect(good.verdict).toBe("accepted");
+    expect(good.checks.every((c) => c.pass)).toBe(true);
+    const bad = await verify.run({
+      capability: "echo", inputs: { text: "sdk verify" },
+      artifact: { data: { echo: "forged" } },
+    });
+    expect(bad.verdict).toBe("rejected");
+    expect(bad.checks[1]).toMatchObject({ name: "re_execution", pass: false });
   });
 });
 

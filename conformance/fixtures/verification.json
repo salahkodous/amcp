@@ -1,0 +1,65 @@
+{
+  "version": "0.1",
+  "fixtures": [
+    {
+      "name": "echo-produces-verifiable-artifact",
+      "request": {"method": "POST", "path": "/amcp/task",
+                  "headers": {"Idempotency-Key": "verify-001"},
+                  "body": {"capability": "echo", "inputs": {"text": "hello verify"}}},
+      "capture": {"atext": "artifact.data.echo"},
+      "expect": {"status": 200, "has": ["artifact"]}
+    },
+    {
+      "name": "honest-artifact-accepted",
+      "request": {"method": "POST", "path": "/amcp/verify",
+                  "body": {"capability": "echo", "inputs": {"text": "hello verify"},
+                           "artifact": {"data": {"echo": "{atext}"}}}},
+      "expect": {"status": 200,
+                 "where": {"verdict": "accepted", "checks.0.pass": true, "checks.1.pass": true},
+                 "has": ["artifact_hash", "signatures"]}
+    },
+    {
+      "name": "tampered-artifact-rejected",
+      "request": {"method": "POST", "path": "/amcp/verify",
+                  "body": {"capability": "echo", "inputs": {"text": "hello verify"},
+                           "artifact": {"data": {"echo": "forged"}}}},
+      "expect": {"status": 200,
+                 "where": {"verdict": "rejected", "checks.0.pass": true, "checks.1.pass": false}}
+    },
+    {
+      "name": "acceptance-criteria-pass",
+      "request": {"method": "POST", "path": "/amcp/verify",
+                  "body": {"capability": "echo", "inputs": {"text": "hello verify"},
+                           "artifact": {"data": {"echo": "{atext}"}},
+                           "criteria": {"type": "object", "required": ["echo"]},
+                           "criteria_committed": true}},
+      "expect": {"status": 200,
+                 "where": {"verdict": "accepted", "checks.2.pass": true,
+                           "criteria_committed": true}}
+    },
+    {
+      "name": "acceptance-criteria-fail",
+      "request": {"method": "POST", "path": "/amcp/verify",
+                  "body": {"capability": "echo", "inputs": {"text": "hello verify"},
+                           "artifact": {"data": {"echo": "{atext}"}},
+                           "criteria": {"type": "object", "required": ["nope"]}}},
+      "expect": {"status": 200,
+                 "where": {"verdict": "rejected", "checks.2.pass": false,
+                           "criteria_committed": false}}
+    },
+    {
+      "name": "unknown-capability-404",
+      "request": {"method": "POST", "path": "/amcp/verify",
+                  "body": {"capability": "nope", "inputs": {},
+                           "artifact": {"data": {}}}},
+      "expect": {"status": 404, "where": {"error.code": "unknown_capability"}}
+    },
+    {
+      "name": "missing-data-422",
+      "request": {"method": "POST", "path": "/amcp/verify",
+                  "body": {"capability": "echo", "inputs": {"text": "x"},
+                           "artifact": {}}},
+      "expect": {"status": 422, "where": {"error.code": "bad_request"}}
+    }
+  ]
+}

@@ -12,6 +12,8 @@ export { DirectoryClient } from "./directory.js";
 export type { SearchFilters } from "./directory.js";
 export { DisputeClient } from "./dispute.js";
 export type { FileClaimInput } from "./dispute.js";
+export { VerifyClient } from "./verify.js";
+export type { VerifyInput, VerifyCheck, Verdict } from "./verify.js";
 export { SCORE_VERSION, SCORE_WEIGHTS, burstWindows, scoreAgent } from "./reputation.js";
 export type { ReputationEvidence, ReputationExperimental, ReputationScore, ReputationScoreKey } from "./reputation.js";
 export { replayFile } from "./replay.js";

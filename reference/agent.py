@@ -94,6 +94,10 @@ try:
     from . import disputes as dsp_eval  # noqa: E402
 except ImportError:  # pragma: no cover
     import disputes as dsp_eval  # type: ignore[no-redef]
+try:
+    from . import verification as vfy_eval  # noqa: E402
+except ImportError:  # pragma: no cover
+    import verification as vfy_eval  # type: ignore[no-redef]
 directory = Directory()
 
 
@@ -350,6 +354,8 @@ class Handler(BaseHTTPRequestHandler):
                 body.get("ref", ""), body.get("outcome", ""),
                 reviewer=body.get("reviewer", ""))
             return self._send(status, resp)
+        if url.path == "/amcp/verify":
+            return self._verify_run()
         if url.path == "/amcp/disputes":
             return self._dispute_file()
         if url.path.startswith("/amcp/disputes/"):
@@ -548,6 +554,33 @@ class Handler(BaseHTTPRequestHandler):
         timeline_append(sess, {"kind": "approval_decided", "visibility": ["*"],
                                "actor": m["actor"]["id"], "approval": p["id"], "decision": rec})
         return rec
+
+    # -- verification (spec/verification.md) -------------------------------
+    def _verify_run(self):
+        body = self._sess_body()
+        if body is None:
+            return
+        capability = body.get("capability")
+        if capability not in CAPABILITIES:
+            return self._error(404, "unknown_capability", f"unknown capability: {capability!r}")
+        inputs = body.get("inputs", {})
+        artifact = body.get("artifact") or {}
+        if "data" not in artifact:
+            return self._error(422, "bad_request", "artifact.data required")
+        data = artifact["data"]
+        criteria = body.get("criteria")
+        data_hash = "sha256:" + sha256_hex(canonical(data))
+        crit_hash = ("sha256:" + sha256_hex(canonical(criteria))) if criteria is not None else None
+        verdict = vfy_eval.verify(
+            capability, inputs, data, criteria, bool(body.get("criteria_committed", False)),
+            execute, CAPABILITIES[capability]["output_schema"],
+            data_hash, crit_hash, AGENT_ID, now_iso())
+        verdict["signatures"] = {"platform": signer.sign(
+            {k: v for k, v in verdict.items() if k != "signatures"})}
+        verdict["signature_valid"] = verify_envelope(
+            {k: v for k, v in verdict.items() if k not in ("signatures", "signature_valid")},
+            verdict["signatures"]["platform"])
+        return self._send(200, verdict)
 
     # -- disputes (spec/disputes.md) ------------------------------------
     def _dispute_subject_known(self, subject: dict) -> bool:
