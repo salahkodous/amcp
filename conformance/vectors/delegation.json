@@ -1,0 +1,172 @@
+{
+  "version": "authz-v1",
+  "now": "2026-09-17T00:00:00Z",
+  "cases": [
+    {
+      "name": "allow-inside-bounds",
+      "chain": [
+        {"delegator": "user:t:ceo", "delegate": "amcp:t:ops", "scope": "procurement",
+         "max_spend_usdc": "10000.00", "categories": ["office", "software"], "regions": ["GCC"],
+         "require_approval_above_usdc": "1000.00", "expires_at": "2026-10-17T00:00:00Z"},
+        {"delegator": "amcp:t:ops", "delegate": "amcp:t:buyer", "scope": "procurement:research",
+         "max_spend_usdc": "2000.00", "categories": ["office"], "regions": ["GCC"],
+         "require_approval_above_usdc": "500.00", "expires_at": "2026-10-17T00:00:00Z"}
+      ],
+      "request": {"actor": "amcp:t:buyer", "operation": "procurement:research:buy",
+                  "amount_usdc": "400.00", "category": "office", "region": "GCC"},
+      "expected": {"decision": "allow", "reason": "allow", "authority": 1}
+    },
+    {
+      "name": "deny-over-parent-limit",
+      "chain": [
+        {"delegator": "user:t:ceo", "delegate": "amcp:t:ops", "scope": "procurement",
+         "max_spend_usdc": "10000.00", "require_approval_above_usdc": "100000.00",
+         "expires_at": "2026-10-17T00:00:00Z"},
+        {"delegator": "amcp:t:ops", "delegate": "amcp:t:buyer", "scope": "procurement:research",
+         "max_spend_usdc": "2000.00", "require_approval_above_usdc": "100000.00",
+         "expires_at": "2026-10-17T00:00:00Z"}
+      ],
+      "request": {"actor": "amcp:t:buyer", "operation": "procurement:research:buy",
+                  "amount_usdc": "2500.00"},
+      "expected": {"decision": "deny", "reason": "over_limit", "authority": -1}
+    },
+    {
+      "name": "escalate-above-child-threshold",
+      "chain": [
+        {"delegator": "user:t:ceo", "delegate": "amcp:t:ops", "scope": "procurement",
+         "max_spend_usdc": "10000.00", "require_approval_above_usdc": "1000.00",
+         "expires_at": "2026-10-17T00:00:00Z"},
+        {"delegator": "amcp:t:ops", "delegate": "amcp:t:buyer", "scope": "procurement:research",
+         "max_spend_usdc": "2000.00", "require_approval_above_usdc": "500.00",
+         "expires_at": "2026-10-17T00:00:00Z"}
+      ],
+      "request": {"actor": "amcp:t:buyer", "operation": "procurement:research:buy",
+                  "amount_usdc": "600.00"},
+      "expected": {"decision": "escalate", "reason": "approval_required", "authority": 1}
+    },
+    {
+      "name": "deny-widening-child-limit",
+      "chain": [
+        {"delegator": "user:t:ceo", "delegate": "amcp:t:ops", "scope": "procurement",
+         "max_spend_usdc": "10000.00", "expires_at": "2026-10-17T00:00:00Z"},
+        {"delegator": "amcp:t:ops", "delegate": "amcp:t:buyer", "scope": "procurement:research",
+         "max_spend_usdc": "20000.00", "expires_at": "2026-10-17T00:00:00Z"}
+      ],
+      "request": {"actor": "amcp:t:buyer", "operation": "procurement:research:buy",
+                  "amount_usdc": "100.00"},
+      "expected": {"decision": "deny", "reason": "monotone_violation", "authority": -1}
+    },
+    {
+      "name": "deny-widening-child-categories",
+      "chain": [
+        {"delegator": "user:t:ceo", "delegate": "amcp:t:ops", "scope": "procurement",
+         "categories": ["office", "software"], "expires_at": "2026-10-17T00:00:00Z"},
+        {"delegator": "amcp:t:ops", "delegate": "amcp:t:buyer", "scope": "procurement:research",
+         "categories": ["office", "travel"], "expires_at": "2026-10-17T00:00:00Z"}
+      ],
+      "request": {"actor": "amcp:t:buyer", "operation": "procurement:research:buy",
+                  "category": "office"},
+      "expected": {"decision": "deny", "reason": "monotone_violation", "authority": -1}
+    },
+    {
+      "name": "deny-expired-link",
+      "chain": [
+        {"delegator": "user:t:ceo", "delegate": "amcp:t:ops", "scope": "procurement",
+         "expires_at": "2026-10-17T00:00:00Z"},
+        {"delegator": "amcp:t:ops", "delegate": "amcp:t:buyer", "scope": "procurement:research",
+         "expires_at": "2026-09-01T00:00:00Z"}
+      ],
+      "request": {"actor": "amcp:t:buyer", "operation": "procurement:research:buy"},
+      "expected": {"decision": "deny", "reason": "link_expired", "authority": -1}
+    },
+    {
+      "name": "deny-revoked-link",
+      "chain": [
+        {"delegator": "user:t:ceo", "delegate": "amcp:t:ops", "scope": "procurement",
+         "revoked": true, "expires_at": "2026-10-17T00:00:00Z"},
+        {"delegator": "amcp:t:ops", "delegate": "amcp:t:buyer", "scope": "procurement:research",
+         "expires_at": "2026-10-17T00:00:00Z"}
+      ],
+      "request": {"actor": "amcp:t:buyer", "operation": "procurement:research:buy"},
+      "expected": {"decision": "deny", "reason": "link_revoked", "authority": -1}
+    },
+    {
+      "name": "deny-broken-contiguity",
+      "chain": [
+        {"delegator": "user:t:ceo", "delegate": "amcp:t:ops", "scope": "procurement",
+         "expires_at": "2026-10-17T00:00:00Z"},
+        {"delegator": "amcp:t:stranger", "delegate": "amcp:t:buyer", "scope": "procurement:research",
+         "expires_at": "2026-10-17T00:00:00Z"}
+      ],
+      "request": {"actor": "amcp:t:buyer", "operation": "procurement:research:buy"},
+      "expected": {"decision": "deny", "reason": "chain_broken", "authority": -1}
+    },
+    {
+      "name": "deny-scope-mismatch",
+      "chain": [
+        {"delegator": "user:t:ceo", "delegate": "amcp:t:buyer", "scope": "procurement",
+         "expires_at": "2026-10-17T00:00:00Z"}
+      ],
+      "request": {"actor": "amcp:t:buyer", "operation": "travel:book"},
+      "expected": {"decision": "deny", "reason": "scope_mismatch", "authority": -1}
+    },
+    {
+      "name": "allow-non-spend-op-skips-limits",
+      "chain": [
+        {"delegator": "user:t:ceo", "delegate": "amcp:t:buyer", "scope": "procurement:research",
+         "max_spend_usdc": "2000.00", "require_approval_above_usdc": "500.00",
+         "expires_at": "2026-10-17T00:00:00Z"}
+      ],
+      "request": {"actor": "amcp:t:buyer", "operation": "procurement:research:quote"},
+      "expected": {"decision": "allow", "reason": "allow", "authority": 0}
+    },
+    {
+      "name": "deny-category-outside-allowlist",
+      "chain": [
+        {"delegator": "user:t:ceo", "delegate": "amcp:t:buyer", "scope": "procurement",
+         "categories": ["office"], "expires_at": "2026-10-17T00:00:00Z"}
+      ],
+      "request": {"actor": "amcp:t:buyer", "operation": "procurement:buy", "category": "travel"},
+      "expected": {"decision": "deny", "reason": "category_denied", "authority": -1}
+    },
+    {
+      "name": "deny-region-outside-allowlist",
+      "chain": [
+        {"delegator": "user:t:ceo", "delegate": "amcp:t:buyer", "scope": "procurement",
+         "regions": ["GCC"], "expires_at": "2026-10-17T00:00:00Z"}
+      ],
+      "request": {"actor": "amcp:t:buyer", "operation": "procurement:buy", "region": "EU"},
+      "expected": {"decision": "deny", "reason": "region_denied", "authority": -1}
+    },
+    {
+      "name": "deny-invalid-amount",
+      "chain": [
+        {"delegator": "user:t:ceo", "delegate": "amcp:t:buyer", "scope": "procurement",
+         "expires_at": "2026-10-17T00:00:00Z"}
+      ],
+      "request": {"actor": "amcp:t:buyer", "operation": "procurement:buy",
+                  "amount_usdc": "12.3456789"},
+      "expected": {"decision": "deny", "reason": "invalid_amount", "authority": -1}
+    },
+    {
+      "name": "deny-malformed-limit",
+      "chain": [
+        {"delegator": "user:t:ceo", "delegate": "amcp:t:buyer", "scope": "procurement",
+         "max_spend_usdc": "lots", "expires_at": "2026-10-17T00:00:00Z"}
+      ],
+      "request": {"actor": "amcp:t:buyer", "operation": "procurement:buy",
+                  "amount_usdc": "1.00"},
+      "expected": {"decision": "deny", "reason": "malformed_link", "authority": -1}
+    },
+    {
+      "name": "allow-unbounded-links",
+      "chain": [
+        {"delegator": "user:t:ceo", "delegate": "amcp:t:ops", "scope": "procurement"},
+        {"delegator": "amcp:t:ops", "delegate": "amcp:t:buyer", "scope": "procurement:research"}
+      ],
+      "request": {"actor": "amcp:t:buyer", "operation": "procurement:research:buy",
+                  "amount_usdc": "999999.99"},
+      "expected": {"decision": "allow", "reason": "allow", "authority": 1}
+    }
+  ]
+}

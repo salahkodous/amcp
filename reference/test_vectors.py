@@ -9,10 +9,12 @@ from decimal import Decimal
 sys.path.insert(0, ".")
 from reference.agent import _amt  # noqa: E402
 from reference.directory import Directory  # noqa: E402
+from reference import authorization as authz  # noqa: E402
 
 PASS, FAIL = 0, 0
 vec = json.load(open("conformance/vectors/money.json"))
 rep = json.load(open("conformance/vectors/reputation.json"))
+dlg = json.load(open("conformance/vectors/delegation.json"))
 
 
 def check(name, cond, detail=""):
@@ -75,6 +77,13 @@ for case in rep["cases"]:
         ok = ok and ((g is None and w is None) or (g is not None and w is not None and abs(g - w) < 1e-9))
     ok = ok and got["experimental"] == exp["experimental"]
     check(f"reputation {case['name']}", ok, f"{got} != {exp}" if not ok else "")
+
+assert dlg["version"] == authz.VERSION, "vector/evaluator version drift"
+from datetime import datetime, timezone
+_NOW = datetime.fromisoformat(dlg["now"].replace("Z", "+00:00")).astimezone(timezone.utc).timestamp()
+for case in dlg["cases"]:
+    got = authz.evaluate(case["chain"], case["request"], _NOW)
+    check(f"delegation {case['name']}", got == case["expected"], f"{got} != {case['expected']}" if got != case["expected"] else "")
 
 print(f"{PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)
