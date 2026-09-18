@@ -1,0 +1,57 @@
+name: AMCP conformance
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+jobs:
+  protocol:
+    name: fixtures + reference suites
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install test deps
+        run: pip install pynacl jsonschema
+      - name: Portable fixture replay (the wire contract)
+        run: python conformance/replay.py
+      - name: Reference behavior suites
+        run: |
+          for suite in test_conformance test_sessions test_directory test_negotiation \
+              test_escalation test_keys test_streaming test_vectors test_disputes \
+              test_verification test_intents; do
+            echo "--- $suite ---"
+            python "reference/$suite.py" || exit 1
+          done
+      - name: Examples validate against schemas
+        run: |
+          python -c "
+          import glob, json, jsonschema, os
+          pairs = {'contract': 'contract', 'descriptor': 'descriptor', 'receipt': 'receipt',
+                   'session': 'session', 'dispute': 'dispute', 'transaction': 'amcp-transaction'}
+          for stem, schema in pairs.items():
+              for ex in glob.glob(f'examples/{stem}*.json'):
+                  jsonschema.validate(json.load(open(ex)), json.load(open(f'schemas/{schema}.schema.json')))
+                  print('ok', ex)
+          "
+
+  sdk:
+    name: TypeScript SDK
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdk-ts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install (zero runtime deps; dev only)
+        run: npm ci
+      - name: Build + full suite (fixtures replay against reference included)
+        run: npm test
+      - name: Typecheck
+        run: npm run check

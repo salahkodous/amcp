@@ -30,5 +30,9 @@
   "registrations": [{ "system": "erc-8004", "ref": "eip155:8453:0x0000000000000000000000000000000000000002:4471" }],
   "verification": "platform_verified",
   "agent_card_uri": "https://example.com/.well-known/agent-card.json",
-  "signature": "ed25519:sig-placeholder-replace-with-real-signature"
+  "signature": {
+    "key_id": "example-key-1",
+    "alg": "ed25519",
+    "sig": "ed25519:EXAMPLE-PLACEHOLDER-REPLACE-WITH-REAL-SIGNATURE"
+  }
 }

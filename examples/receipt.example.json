@@ -12,5 +12,8 @@
   "outcome": "accepted",
   "trial": false,
   "decided_at": "2026-09-16T06:42:00Z",
-  "signatures": { "payer": "ed25519:sig-p", "platform": "ed25519:sig-h" }
+  "signatures": { "payer": "ed25519:sig-p", "platform": {
+    "key_id": "example-key-1", "alg": "ed25519",
+    "sig": "ed25519:EXAMPLE-PLACEHOLDER-REPLACE-WITH-REAL-SIGNATURE"
+  } }
 }

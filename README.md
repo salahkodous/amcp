@@ -1,5 +1,8 @@
 # AMCP — Agent Model Context Protocol
 
+[![AMCP conformance](https://github.com/salahkodous/amcp/actions/workflows/ci.yml/badge.svg)](https://github.com/salahkodous/amcp/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 > **`amcp/0.1` — public draft.** The wire contract is fixture-pinned and stable enough to build against; reputation weights, directory ranking, and MPP-tab mappings are explicitly versioned experiments. Nothing here is final until a non-affiliated implementation settles real tasks against it.
 
 > **MCP gives a model tools. A2A gives two agents messages and tasks. AMCP gives the whole team — agents and humans — one room to work in, with identity, roles, budgets, and settlement.**
