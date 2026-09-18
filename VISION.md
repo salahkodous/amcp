@@ -51,7 +51,6 @@ Strangers transact on **proof, not promises**. Three proofs, each portable:
    **weight zero** until it meets real adversarial data.
 
 ## 4. Decisions and why
-
 **Wire-first, fixtures-first.** Schemas + spec + fixtures + vectors are
 normative; code is commentary. Any implementation in any language proves
 itself by replaying the fixtures. This is what makes a future Rust runtime a
@@ -135,7 +134,62 @@ split into an isolated service whose compromise yields at most stale flags.
   fresh worker with a `script_name` binding routes around it — and the blast
   isolation is worth keeping afterward.
 
-## 7. What “done” looks like from here
+## 7. Locked model: eight primitives
+
+Everything else is composition of existing standards or implementation
+detail. The primitives, in lifecycle order:
+
+```text
+IDENTITY          Who is participating? (keys)
+CAPABILITY        What can they provide? (descriptor)
+INTENT            What outcome is requested? (frontier: request-for-quote)
+AUTHORIZATION     Who authorized whom, under what bounds? (grants + policy)
+COMMITMENT        What exactly was agreed? (bilateral contract)
+RECEIPT           What actually happened? (signed, settlement-bound)
+EVIDENCE          What proves it? (source-keyed, portable)
+DISPUTE           What happens on disagreement? (frontier: claim/adjudicate/enforce)
+```
+
+External standards plug in rather than compete: A2A (communication), MCP
+(tool execution), x402 (payment movement), ERC-8004 (anchors), NANDA/DNS-AID
+(resolution). AMCP's differentiated semantics — the part no underlying
+protocol provides — is the economic state and evidence that survives across
+them: source-keyed idempotent evidence, scale-parity money, 202-pending
+decision receipts, absent-excluded reputation, L0-vs-ranked lifecycle,
+unscoreable-raw preservation, bilateral commitments, transaction-bound
+receipts, dispute state.
+
+## 8. Consent: a control plane, not a step
+
+Humans aren't merely participants in the loop. Where policy requires it, they
+are the final authority over consequential actions — and that authority must
+scale without turning humans into per-transaction bottlenecks:
+
+- **Levels, not just allow/deny.** Policy maps (amount, counterparty,
+  operation, reversibility, …) to auto / escalate / deny. Humans configure
+  boundaries; agents operate inside them.
+- **Delegatable and monotonically restrictive.** Authority chains shrink at
+  every hop: no agent delegates more than it possesses. Checkable locally,
+  fixture-provable.
+- **Risk-sensitive, but bounded.** The evaluated dimensions stay small and
+  versioned — a policy engine nobody can audit is worse than a strict one.
+- **Attached to authority, not payment.** A payment can be valid on the rails
+  and unauthorized by the principal. Order is fixed: authorize → consent →
+  pay. The existing owner-tier enforcement (before execution, before approval
+  release) is this rule in code.
+- **Expiring and revocable.** Every grant carries bounds in time and scope.
+  Revocation is forward-looking and audit-preserving — the same philosophy as
+  reputation revocation: it freezes future authority and flags in-flight
+  work, never rewrites the past.
+- **Receipted, not buttoned.** The protocol object is the signed decision
+  receipt (the existing decision receipt, unified — not a parallel object).
+  "Approve the pattern" turns one decision into reusable policy, so human
+  workload becomes policy configuration, not transaction processing.
+
+Principle: **human consent scales through bounded authority, not repeated
+approval.**
+
+## 9. What “done” looks like from here
 
 - A second, independent ranker consuming the same evidence (aggregator
   competition begins; portability proves itself).
