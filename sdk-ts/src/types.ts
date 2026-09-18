@@ -150,6 +150,37 @@ export interface DisputeEnforcement {
   source_key: string;
 }
 
+/** Transaction anchor (amcp-transaction.schema.json): the eight primitives
+ * as one interoperable object. Sections reference by id/hash and are
+ * append-only in time; later sections annotate, never edit, earlier ones. */
+export interface TransactionAuthorizationLink {
+  delegator: string;
+  delegate: string;
+  scope: string;
+  max_spend_usdc?: string | null;
+  expires_at?: string | null;
+  signature?: Record<string, unknown>;
+}
+
+export interface AmcpTransaction {
+  amcp_version: AmcpVersion;
+  id: string;
+  identity?: { principal?: string; counterparty?: string } | null;
+  capability?: Record<string, unknown> | null;
+  intent?: { action?: string; ceiling_usdc?: string | null } | null;
+  authorization_chain?: TransactionAuthorizationLink[] | null;
+  consent?: { decisions?: Record<string, unknown>[] } | null;
+  commitment?: { contract_id?: string; terms_hash?: string } | null;
+  payment?: { settlement_proof?: string; amount_usdc?: string | null } | null;
+  execution?: { session_id?: string | null; task_ref?: string | null } | null;
+  receipt?: { receipt_id?: string } | null;
+  evidence?: { ref: string; hash?: string | null; uri?: string | null }[] | null;
+  verification?: { verdict?: "accepted" | "rejected" | "partial" | null; detail?: string | null } | null;
+  settlement?: { escrow_id?: string | null; status?: "held" | "released" | "refunded" | null } | null;
+  reputation?: { profile_version?: string | null; composite?: number | null } | null;
+  dispute?: { dispute_id?: string } | null;
+}
+
 export interface Dispute {
   amcp_version: AmcpVersion;
   dispute_id: string;

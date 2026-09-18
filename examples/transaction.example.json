@@ -1,0 +1,27 @@
+{
+  "amcp_version": "0.1",
+  "id": "tx_example00000001",
+  "identity": {
+    "principal": "amcp:example:buyer_1",
+    "counterparty": "amcp:example:seller_9"
+  },
+  "capability": {"id": "lead_research"},
+  "intent": {"action": "research 100 qualified distributors", "ceiling_usdc": "40.00"},
+  "authorization_chain": [
+    {"delegator": "user:example:ceo", "delegate": "amcp:example:buyer_1",
+     "scope": "procurement:research", "max_spend_usdc": "100.00",
+     "expires_at": "2026-10-16T00:00:00Z", "signature": {}}
+  ],
+  "consent": {"decisions": []},
+  "commitment": {"contract_id": "ct_example00000001", "terms_hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333"},
+  "payment": {"settlement_proof": "x402:eip155:8453:0xsettle-tx-placeholder", "amount_usdc": "40.00"},
+  "execution": {"session_id": "sess_01JEXAMPLE0001", "task_ref": "task_01JEXAMPLE0001"},
+  "receipt": {"receipt_id": "rcpt_example00000001"},
+  "evidence": [
+    {"ref": "artifact:distributors-batch-1", "hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222", "uri": null}
+  ],
+  "verification": {"verdict": "partial", "detail": "62 of 100 delivered"},
+  "settlement": {"escrow_id": "esc_example01", "status": "held"},
+  "reputation": {"profile_version": "reputation-v1", "composite": null},
+  "dispute": {"dispute_id": "dsp_example00000001"}
+}

@@ -1,0 +1,141 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://amcp.dev/schemas/v0.1/amcp-transaction.schema.json",
+  "title": "AMCP Transaction Anchor",
+  "description": "One interoperable object binding the eight primitives (identity, capability, intent, authorization, commitment, receipt, evidence, dispute) plus composed payment/settlement stages. Sections reference each other by id/hash and are append-only in time: later sections annotate, never edit, earlier ones. See spec/disputes.md §7. AMCP v0.1.",
+  "type": "object",
+  "required": [
+    "amcp_version",
+    "id"
+  ],
+  "properties": {
+    "amcp_version": {
+      "const": "0.1"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^tx_[A-Za-z0-9_-]{8,64}$"
+    },
+    "identity": {
+      "type": ["object", "null"],
+      "description": "Parties: claimant-side principal, counterparty, agents/humans involved. Keys live in descriptors, referenced by id.",
+      "properties": {
+        "principal": {"type": "string"},
+        "counterparty": {"type": "string"}
+      }
+    },
+    "capability": {
+      "type": ["object", "null"],
+      "description": "What was provided/done. Mirrors a descriptor capability entry by id, not by value."
+    },
+    "intent": {
+      "type": ["object", "null"],
+      "description": "Requested outcome: action, constraints, budget ceiling. Frontier: request-for-quote broadcast.",
+      "properties": {
+        "action": {"type": "string"},
+        "ceiling_usdc": {"type": ["string", "null"], "pattern": "^[0-9]+(\\.[0-9]{1,6})?$"}
+      }
+    },
+    "authorization_chain": {
+      "type": ["array", "null"],
+      "description": "Ordered grants, principal-first. Each link monotonically restricts the previous: scope, limits, expiry. See VISION.md §8.",
+      "items": {
+        "type": "object",
+        "required": ["delegator", "delegate", "scope"],
+        "properties": {
+          "delegator": {"type": "string"},
+          "delegate": {"type": "string"},
+          "scope": {"type": "string"},
+          "max_spend_usdc": {"type": ["string", "null"], "pattern": "^[0-9]+(\\.[0-9]{1,6})?$"},
+          "expires_at": {"type": ["string", "null"]},
+          "signature": {"type": "object"}
+        }
+      }
+    },
+    "consent": {
+      "type": ["object", "null"],
+      "description": "Authoritative decisions at human-approval boundaries. Unified with decision receipts: one object, not two.",
+      "properties": {
+        "decisions": {
+          "type": "array",
+          "items": {"type": "object"}
+        }
+      }
+    },
+    "commitment": {
+      "type": ["object", "null"],
+      "description": "What the parties agreed: terms hash + bilateral signatures. Mirrors contract.schema.json by contract_id.",
+      "properties": {
+        "contract_id": {"type": "string"},
+        "terms_hash": {"type": "string"}
+      }
+    },
+    "payment": {
+      "type": ["object", "null"],
+      "description": "Composed payment stage (x402). AMCP records authorization linkage, never moves money.",
+      "properties": {
+        "settlement_proof": {"type": "string"},
+        "amount_usdc": {"type": ["string", "null"], "pattern": "^[0-9]+(\\.[0-9]{1,6})?$"}
+      }
+    },
+    "execution": {
+      "type": ["object", "null"],
+      "description": "Where/how work ran (session/room/task refs). AMCP does not constrain the execution substrate.",
+      "properties": {
+        "session_id": {"type": ["string", "null"]},
+        "task_ref": {"type": ["string", "null"]}
+      }
+    },
+    "receipt": {
+      "type": ["object", "null"],
+      "description": "Signed portable proof. References receipt.schema.json by receipt_id.",
+      "properties": {
+        "receipt_id": {"type": "string"}
+      }
+    },
+    "evidence": {
+      "type": ["array", "null"],
+      "description": "Source-keyed evidence refs (hash/URI). Audit everything; rank only the understood.",
+      "items": {
+        "type": "object",
+        "required": ["ref"],
+        "properties": {
+          "ref": {"type": "string"},
+          "hash": {"type": ["string", "null"]},
+          "uri": {"type": ["string", "null"]}
+        }
+      }
+    },
+    "verification": {
+      "type": ["object", "null"],
+      "description": "Acceptance evaluation against commitment criteria. Frontier: executed (not just schemad) verdicts.",
+      "properties": {
+        "verdict": {"enum": ["accepted", "rejected", "partial", null]},
+        "detail": {"type": ["string", "null"]}
+      }
+    },
+    "settlement": {
+      "type": ["object", "null"],
+      "description": "Ledger outcome: escrow transitions, disbursement records. Ledger-only; disbursement is out of scope.",
+      "properties": {
+        "escrow_id": {"type": ["string", "null"]},
+        "status": {"enum": ["held", "released", "refunded", null]}
+      }
+    },
+    "reputation": {
+      "type": ["object", "null"],
+      "description": "Projected evidence refs + reputation-v1 snapshot version. Never a private score as source data.",
+      "properties": {
+        "profile_version": {"type": ["string", "null"]},
+        "composite": {"type": ["number", "null"]}
+      }
+    },
+    "dispute": {
+      "type": ["object", "null"],
+      "description": "References dispute.schema.json by dispute_id. Terminal dispute states feed reputation and close.",
+      "properties": {
+        "dispute_id": {"type": "string"}
+      }
+    }
+  }
+}
