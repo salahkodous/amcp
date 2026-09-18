@@ -14,6 +14,8 @@ export { DisputeClient } from "./dispute.js";
 export type { FileClaimInput } from "./dispute.js";
 export { VerifyClient } from "./verify.js";
 export type { VerifyInput, VerifyCheck, Verdict } from "./verify.js";
+export { IntentsClient } from "./intents.js";
+export type { PublishIntentInput, IntentSummary } from "./intents.js";
 export { SCORE_VERSION, SCORE_WEIGHTS, burstWindows, scoreAgent } from "./reputation.js";
 export type { ReputationEvidence, ReputationExperimental, ReputationScore, ReputationScoreKey } from "./reputation.js";
 export { replayFile } from "./replay.js";

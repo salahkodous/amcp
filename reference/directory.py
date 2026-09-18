@@ -18,7 +18,9 @@ import math
 import re
 import time
 import urllib.request
+import uuid
 from collections import Counter
+from decimal import Decimal, InvalidOperation
 
 TOKEN_RE = re.compile(r"[a-z0-9]{2,}")
 
@@ -39,6 +41,7 @@ class Directory:
     def __init__(self):
         self.agents = {}    # agent_id -> record
         self.evidence = {}  # agent_id -> [evidence dicts]
+        self.intents = {}   # intent_id -> intent dict (spec/intents.md)
 
     # -- submit ------------------------------------------------------
     def submit(self, descriptor: dict, check_liveness: bool = False):
@@ -259,3 +262,170 @@ class Directory:
                 for score, sim, aid, matched, rep in page]
         nxt = str(off + limit) if off + limit < len(hits) else None
         return {"data": data, "pagination": {"next_cursor": nxt, "has_more": nxt is not None}}
+
+    # -- intents: discovery from demand (spec/intents.md) ---------------
+    # Lazy clocks (expiry on touch), one open intent per (principal, action),
+    # quotes append-only with supersede, acceptance is principal-only.
+    INTENT_STATES = ("open", "quoted", "accepted", "withdrawn", "expired")
+    _AMOUNT_RE = re.compile(r"^[0-9]+(?:\.[0-9]{1,6})?$")
+    MAX_QUOTES = 64
+
+    @staticmethod
+    def _intent_amt(raw):
+        if not isinstance(raw, str) or not Directory._AMOUNT_RE.match(raw):
+            return None
+        try:
+            v = Decimal(raw)
+        except (InvalidOperation, ValueError):
+            return None
+        return v if v.is_finite() and v >= 0 else None
+
+    def _intent_touch(self, intent: dict):
+        if intent["state"] in ("open", "quoted") and time.time() >= intent["expires_at"]:
+            intent["state"] = "expired"
+        return intent
+
+    def publish_intent(self, principal: str, action: str, description: str = "",
+                       constraints=None, expires_in_seconds=86400):
+        action = (action or "").strip()
+        if not principal or not action:
+            return 422, self._wire("bad_request", "principal + non-empty action required")
+        if len(action) > 200 or len(description or "") > 2000:
+            return 422, self._wire("bad_request", "action <= 200 chars, description <= 2000 chars")
+        constraints = constraints or {}
+        if not isinstance(constraints, dict):
+            return 422, self._wire("bad_request", "constraints must be an object")
+        ceiling = constraints.get("max_price_usdc")
+        if ceiling is not None and self._intent_amt(ceiling) is None:
+            return 422, self._wire("bad_request", "constraints.max_price_usdc must be a wire amount")
+        try:
+            window = int(expires_in_seconds)
+            if window < 0:
+                raise ValueError()
+        except (ValueError, TypeError):
+            return 422, self._wire("bad_request", "expires_in_seconds must be a non-negative integer")
+        for it in self.intents.values():
+            self._intent_touch(it)
+            if it["principal"] == principal and it["action"] == action \
+                    and it["state"] in ("open", "quoted"):
+                return 409, self._wire("terms_rejected", "open intent already exists for this principal+action")
+        iid = "intent_" + uuid.uuid4().hex[:16]
+        intent = {"amcp_version": "0.1", "intent_id": iid, "principal": principal,
+                  "action": action, "description": description or "",
+                  "constraints": {"max_price_usdc": ceiling,
+                                  "capabilities": list(constraints.get("capabilities") or []),
+                                  "domains": list(constraints.get("domains") or []),
+                                  "regions": list(constraints.get("regions") or [])},
+                  "state": "open", "quotes": [], "accepted_quote": None,
+                  "expires_at": time.time() + window, "published_at": now_iso()}
+        self.intents[iid] = intent
+        return 201, {"intent_id": iid, "state": "open",
+                     "expires_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(intent["expires_at"]))}
+
+    def quote_intent(self, intent_id: str, agent_id: str, price_usdc: str,
+                     terms: str = "", expires_in_seconds=72 * 3600):
+        intent = self.intents.get(intent_id)
+        if not intent:
+            return 404, self._wire("unknown_agent", f"unknown intent: {intent_id!r}")
+        self._intent_touch(intent)
+        if intent["state"] not in ("open", "quoted"):
+            return 409, self._wire("terms_rejected", f"intent is {intent['state']}")
+        if agent_id not in self.agents:
+            return 404, self._wire("unknown_agent", f"unknown quoting agent: {agent_id!r}")
+        if self._intent_amt(price_usdc) is None:
+            return 422, self._wire("bad_request", "price_usdc must be a wire amount")
+        if len(terms or "") > 2000:
+            return 422, self._wire("bad_request", "terms <= 2000 chars")
+        try:
+            window = int(expires_in_seconds)
+            if window < 0:
+                raise ValueError()
+        except (ValueError, TypeError):
+            return 422, self._wire("bad_request", "expires_in_seconds must be a non-negative integer")
+        live = [q for q in intent["quotes"] if not q["superseded"] and time.time() < q["expires_at"]]
+        for q in live:
+            if q["agent_id"] == agent_id:
+                q["superseded"] = True
+        if len([q for q in live if not q["superseded"]]) >= self.MAX_QUOTES:
+            oldest = min((q for q in live if not q["superseded"]), key=lambda q: q["quoted_at"])
+            oldest["superseded"] = True
+        quote = {"agent_id": agent_id, "price_usdc": price_usdc, "terms": terms or "",
+                 "quoted_at": now_iso(),
+                 "expires_at": min(time.time() + window, intent["expires_at"]),
+                 "superseded": False,
+                 "verification": self.agents[agent_id].get("verification", "self_asserted")}
+        intent["quotes"].append(quote)
+        intent["state"] = "quoted"
+        return 201, {"state": "quoted", "quote_count": len([q for q in intent["quotes"] if not q["superseded"]])}
+
+    def accept_quote(self, intent_id: str, actor: str, agent_id: str):
+        intent = self.intents.get(intent_id)
+        if not intent:
+            return 404, self._wire("unknown_agent", f"unknown intent: {intent_id!r}")
+        self._intent_touch(intent)
+        if intent["state"] not in ("open", "quoted"):
+            return 409, self._wire("terms_rejected", f"intent is {intent['state']}")
+        if actor != intent["principal"]:
+            return 403, self._wire("capability_denied", "only the principal accepts a quote")
+        live = [q for q in intent["quotes"]
+                if not q["superseded"] and time.time() < q["expires_at"] and q["agent_id"] == agent_id]
+        if not live:
+            return 409, self._wire("terms_rejected", "no live quote from that agent")
+        intent["accepted_quote"] = live[-1]
+        intent["state"] = "accepted"
+        return 200, {"state": "accepted", "accepted_quote": live[-1]}
+
+    def withdraw_intent(self, intent_id: str, actor: str):
+        intent = self.intents.get(intent_id)
+        if not intent:
+            return 404, self._wire("unknown_agent", f"unknown intent: {intent_id!r}")
+        self._intent_touch(intent)
+        if intent["state"] not in ("open", "quoted"):
+            return 409, self._wire("terms_rejected", f"intent is {intent['state']}")
+        if actor != intent["principal"]:
+            return 403, self._wire("capability_denied", "only the principal withdraws")
+        intent["state"] = "withdrawn"
+        return 200, {"state": "withdrawn"}
+
+    def get_intent(self, intent_id: str):
+        intent = self.intents.get(intent_id)
+        if not intent:
+            return 404, self._wire("unknown_agent", f"unknown intent: {intent_id!r}")
+        self._intent_touch(intent)
+        return 200, {"intent_id": intent_id, "state": intent["state"],
+                     "intent": intent, "quotes": intent["quotes"]}
+
+    def list_intents(self, capability=None, max_price_usdc=None, limit=20):
+        try:
+            limit = max(1, min(100, int(limit)))
+        except (ValueError, TypeError):
+            raise ValueError("limit must be 1..100")
+        floor = None
+        if max_price_usdc is not None:
+            floor = self._intent_amt(max_price_usdc)
+            if floor is None:
+                raise ValueError("max_price_usdc must be a wire amount")
+        data = []
+        for it in self.intents.values():
+            self._intent_touch(it)
+            if it["state"] not in ("open", "quoted"):
+                continue
+            caps = it["constraints"].get("capabilities") or []
+            if capability and caps and capability not in caps:
+                continue
+            ceiling = it["constraints"].get("max_price_usdc")
+            if floor is not None and (ceiling is None or self._intent_amt(ceiling) < floor):
+                continue
+            data.append({"intent_id": it["intent_id"], "principal": it["principal"],
+                         "action": it["action"], "state": it["state"],
+                         "quote_count": len([q for q in it["quotes"] if not q["superseded"]]),
+                         "max_price_usdc": ceiling,
+                         "expires_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(it["expires_at"]))})
+        data.sort(key=lambda r: r["intent_id"])
+        return {"data": data[:limit],
+                "pagination": {"next_cursor": None, "has_more": False}}
+
+    @staticmethod
+    def _wire(code: str, message: str):
+        return {"error": {"code": code, "message": message, "retryable": False,
+                          "doc": "https://amcp.dev/spec/wire#error-codes"}}

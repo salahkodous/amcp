@@ -309,6 +309,21 @@ class Handler(BaseHTTPRequestHandler):
             if scored is None:
                 return self._error(404, "unknown_agent", "unknown agent")
             self._send(200, scored)
+        elif url.path == "/amcp/directory/intents":
+            qs = parse_qs(url.query)
+            try:
+                self._send(200, directory.list_intents(
+                    capability=(qs.get("capability", [None])[0]),
+                    max_price_usdc=(qs.get("max_price_usdc", [None])[0]),
+                    limit=int(qs.get("limit", ["20"])[0])))
+            except ValueError as e:
+                self._error(422, "bad_request", str(e)[:200])
+        elif url.path.startswith("/amcp/directory/intents/"):
+            parts = url.path.split("/")
+            if len(parts) == 5 and parts[4]:
+                status, resp = directory.get_intent(parts[4])
+                return self._send(status, resp)
+            return self._error(404, "unknown_method", f"no such endpoint: {url.path}")
         elif url.path.startswith("/amcp/disputes/"):
             parts = url.path.split("/")
             if len(parts) == 4 and parts[3]:
@@ -354,6 +369,41 @@ class Handler(BaseHTTPRequestHandler):
                 body.get("ref", ""), body.get("outcome", ""),
                 reviewer=body.get("reviewer", ""))
             return self._send(status, resp)
+        if url.path == "/amcp/directory/intents":
+            body = self._sess_body()
+            if body is None:
+                return
+            status, resp = directory.publish_intent(
+                body.get("principal", ""), body.get("action", ""),
+                description=body.get("description", ""),
+                constraints=body.get("constraints"),
+                expires_in_seconds=body.get("expires_in_seconds", 86400))
+            return self._send(status, resp)
+        if url.path.startswith("/amcp/directory/intents/"):
+            parts = url.path.split("/")
+            if len(parts) == 6 and parts[4] and parts[5] == "quotes":
+                body = self._sess_body()
+                if body is None:
+                    return
+                status, resp = directory.quote_intent(
+                    parts[4], body.get("agent_id", ""), body.get("price_usdc", ""),
+                    terms=body.get("terms", ""),
+                    expires_in_seconds=body.get("expires_in_seconds", 72 * 3600))
+                return self._send(status, resp)
+            if len(parts) == 6 and parts[4] and parts[5] == "accept":
+                body = self._sess_body()
+                if body is None:
+                    return
+                status, resp = directory.accept_quote(
+                    parts[4], body.get("actor", ""), body.get("agent_id", ""))
+                return self._send(status, resp)
+            if len(parts) == 6 and parts[4] and parts[5] == "withdraw":
+                body = self._sess_body()
+                if body is None:
+                    return
+                status, resp = directory.withdraw_intent(parts[4], body.get("actor", ""))
+                return self._send(status, resp)
+            return self._error(404, "unknown_method", f"no such endpoint: {url.path}")
         if url.path == "/amcp/verify":
             return self._verify_run()
         if url.path == "/amcp/disputes":

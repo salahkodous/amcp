@@ -1,0 +1,147 @@
+{
+  "version": "0.1",
+  "fixtures": [
+    {
+      "name": "register-quoting-agent",
+      "request": {"method": "POST", "path": "/amcp/directory/submit",
+                  "body": {"descriptor": {
+                    "amcp_version": "0.1", "id": "amcp:t:researcher", "name": "Researcher",
+                    "description": "Researches distributors and markets.",
+                    "version": "1.0.0",
+                    "capabilities": [{
+                      "name": "lead_research", "kind": "operation",
+                      "description": "Research qualified distributors.",
+                      "input_schema": {"type": "object"}, "output_schema": {"type": "object"},
+                      "authorization": "authenticated"}]}}},
+      "expect": {"status": 201, "where": {"listed": "amcp:t:researcher"}}
+    },
+    {
+      "name": "publish-intent",
+      "request": {"method": "POST", "path": "/amcp/directory/intents",
+                  "body": {"principal": "amcp:t:buyer", "action": "research 100 distributors",
+                           "description": "Qualified distributors in scope.",
+                           "constraints": {"max_price_usdc": "40.00",
+                                           "capabilities": ["lead_research"]}}},
+      "capture": {"iid": "intent_id"},
+      "expect": {"status": 201,
+                 "where": {"state": "open"},
+                 "has": ["intent_id", "expires_at"]}
+    },
+    {
+      "name": "empty-action-rejected",
+      "request": {"method": "POST", "path": "/amcp/directory/intents",
+                  "body": {"principal": "amcp:t:buyer", "action": "  "}},
+      "expect": {"status": 422, "where": {"error.code": "bad_request"}}
+    },
+    {
+      "name": "bad-ceiling-rejected",
+      "request": {"method": "POST", "path": "/amcp/directory/intents",
+                  "body": {"principal": "amcp:t:buyer", "action": "other work",
+                           "constraints": {"max_price_usdc": "40.0000001"}}},
+      "expect": {"status": 422, "where": {"error.code": "bad_request"}}
+    },
+    {
+      "name": "duplicate-open-intent-refused",
+      "request": {"method": "POST", "path": "/amcp/directory/intents",
+                  "body": {"principal": "amcp:t:buyer", "action": "research 100 distributors"}},
+      "expect": {"status": 409, "where": {"error.code": "terms_rejected"}}
+    },
+    {
+      "name": "quote-by-unknown-agent-refused",
+      "request": {"method": "POST", "path": "/amcp/directory/intents/{iid}/quotes",
+                  "body": {"agent_id": "amcp:t:ghost", "price_usdc": "30.00"}},
+      "expect": {"status": 404, "where": {"error.code": "unknown_agent"}}
+    },
+    {
+      "name": "quote-bad-price-rejected",
+      "request": {"method": "POST", "path": "/amcp/directory/intents/{iid}/quotes",
+                  "body": {"agent_id": "amcp:t:researcher", "price_usdc": "free"}},
+      "expect": {"status": 422, "where": {"error.code": "bad_request"}}
+    },
+    {
+      "name": "agent-quotes",
+      "request": {"method": "POST", "path": "/amcp/directory/intents/{iid}/quotes",
+                  "body": {"agent_id": "amcp:t:researcher", "price_usdc": "35.00",
+                           "terms": "100 distributors in 2 hours with sources"}},
+      "expect": {"status": 201, "where": {"state": "quoted"}}
+    },
+    {
+      "name": "non-principal-cannot-accept",
+      "request": {"method": "POST", "path": "/amcp/directory/intents/{iid}/accept",
+                  "body": {"actor": "amcp:t:researcher", "agent_id": "amcp:t:researcher"}},
+      "expect": {"status": 403, "where": {"error.code": "capability_denied"}}
+    },
+    {
+      "name": "principal-accepts-quote",
+      "request": {"method": "POST", "path": "/amcp/directory/intents/{iid}/accept",
+                  "body": {"actor": "amcp:t:buyer", "agent_id": "amcp:t:researcher"}},
+      "expect": {"status": 200,
+                 "where": {"state": "accepted", "accepted_quote.agent_id": "amcp:t:researcher"}}
+    },
+    {
+      "name": "double-accept-refused",
+      "request": {"method": "POST", "path": "/amcp/directory/intents/{iid}/accept",
+                  "body": {"actor": "amcp:t:buyer", "agent_id": "amcp:t:researcher"}},
+      "expect": {"status": 409, "where": {"error.code": "terms_rejected"}}
+    },
+    {
+      "name": "withdraw-after-accept-refused",
+      "request": {"method": "POST", "path": "/amcp/directory/intents/{iid}/withdraw",
+                  "body": {"actor": "amcp:t:buyer"}},
+      "expect": {"status": 409, "where": {"error.code": "terms_rejected"}}
+    },
+    {
+      "name": "publish-withdrawable-intent",
+      "request": {"method": "POST", "path": "/amcp/directory/intents",
+                  "body": {"principal": "amcp:t:buyer", "action": "translate a page"}},
+      "capture": {"iid2": "intent_id"},
+      "expect": {"status": 201}
+    },
+    {
+      "name": "principal-withdraws",
+      "request": {"method": "POST", "path": "/amcp/directory/intents/{iid2}/withdraw",
+                  "body": {"actor": "amcp:t:buyer"}},
+      "expect": {"status": 200, "where": {"state": "withdrawn"}}
+    },
+    {
+      "name": "quote-withdrawn-refused",
+      "request": {"method": "POST", "path": "/amcp/directory/intents/{iid2}/quotes",
+                  "body": {"agent_id": "amcp:t:researcher", "price_usdc": "5.00"}},
+      "expect": {"status": 409, "where": {"error.code": "terms_rejected"}}
+    },
+    {
+      "name": "publish-expiring-intent",
+      "request": {"method": "POST", "path": "/amcp/directory/intents",
+                  "body": {"principal": "amcp:t:buyer", "action": "urgent gig",
+                           "expires_in_seconds": 0}},
+      "capture": {"iid3": "intent_id"},
+      "expect": {"status": 201}
+    },
+    {
+      "name": "expiry-on-touch",
+      "request": {"method": "GET", "path": "/amcp/directory/intents/{iid3}"},
+      "expect": {"status": 200, "where": {"state": "expired"}}
+    },
+    {
+      "name": "publish-browsable-intent",
+      "request": {"method": "POST", "path": "/amcp/directory/intents",
+                  "body": {"principal": "amcp:t:buyer", "action": "score my funnel",
+                           "constraints": {"max_price_usdc": "9.00",
+                                           "capabilities": ["lead_research"]}}},
+      "capture": {"iid4": "intent_id"},
+      "expect": {"status": 201}
+    },
+    {
+      "name": "list-filters-by-capability",
+      "request": {"method": "GET", "path": "/amcp/directory/intents?capability=lead_research&max_price_usdc=5.00"},
+      "expect": {"status": 200,
+                 "where": {"data.0.intent_id": "{iid4}"},
+                 "has": ["data", "pagination"]}
+    },
+    {
+      "name": "unknown-intent-404",
+      "request": {"method": "GET", "path": "/amcp/directory/intents/intent_nope"},
+      "expect": {"status": 404, "where": {"error.code": "unknown_agent"}}
+    }
+  ]
+}

@@ -1,14 +1,17 @@
 /** SDK behavior beyond fixtures: Ed25519 vector, offline receipt verify,
- * canonical-JSON parity with the reference, SSE stream resume. */
+ * canonical-JSON parity with the reference, SSE stream resume, disputes,
+ * verification, intents. */
 import { spawn, ChildProcess } from "node:child_process";
 import { beforeAll, afterAll, describe, it, expect } from "vitest";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { canonicalJson, verifyEd25519, TEST_VECTOR } from "../src/envelope.js";
-import { IdentityClient } from "../src/descriptor.js";
+import { IdentityClient, defineDescriptor } from "../src/descriptor.js";
+import { DirectoryClient } from "../src/directory.js";
 import { TaskClient } from "../src/task.js";
 import { DisputeClient } from "../src/dispute.js";
 import { VerifyClient } from "../src/verify.js";
+import { IntentsClient } from "../src/intents.js";
 import { SessionClient } from "../src/session.js";
 import { AmcpError } from "../src/errors.js";
 
@@ -93,6 +96,25 @@ describe("verification", () => {
     });
     expect(bad.verdict).toBe("rejected");
     expect(bad.checks[1]).toMatchObject({ name: "re_execution", pass: false });
+  });
+});
+
+describe("intents", () => {
+  it("publish → quote → accept roundtrip through the client", async () => {
+    const directory = new DirectoryClient({ baseUrl: BASE });
+    const intents = new IntentsClient({ baseUrl: BASE });
+    await directory.submit(defineDescriptor({
+      id: "sdk:quoter", name: "Quoter", description: "Quotes SDK intents.",
+      version: "1.0.0", capabilities: [],
+    }));
+    const published = await intents.publish({
+      principal: "sdk:boss", action: "sdk demand probe",
+      constraints: { max_price_usdc: "10.00", capabilities: ["echo"] },
+    });
+    expect(published.state).toBe("open");
+    await intents.quote(published.intent_id, "sdk:quoter", "7.50");
+    const done = await intents.accept(published.intent_id, "sdk:boss", "sdk:quoter");
+    expect(done.state).toBe("accepted");
   });
 });
 
