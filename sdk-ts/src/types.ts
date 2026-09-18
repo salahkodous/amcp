@@ -112,6 +112,62 @@ export interface NegotiationTerms {
   deliverable: string;
 }
 
+export type DisputeKind = "non_delivery" | "partial_delivery" | "wrong_output"
+  | "late_delivery" | "unauthorized_delegation" | "evidence_forged" | "double_commit";
+export type DisputeRemedy = "refund_full" | "refund_partial" | "redo" | "split"
+  | "concede" | "escalate";
+export type DisputeState = "filed" | "evidenced" | "adjudicating" | "decided"
+  | "resolved" | "withdrawn";
+export type DisputeTier = "respondent" | "arbiter" | "principal";
+export type DisputeOutcome = "conceded" | "upheld" | "rejected" | "split";
+
+export interface DisputeSubject {
+  kind: "receipt" | "session";
+  ref: string;
+}
+
+export interface DisputeEvidenceRef {
+  ref: string;
+  hash?: string;
+  uri?: string;
+  kind?: string;
+}
+
+export interface DisputeDecision {
+  outcome: "upheld" | "rejected" | "split";
+  remedy: DisputeRemedy;
+  amount_usdc?: string | null;
+  rationale?: string;
+  arbiter: string;
+  signature_valid?: boolean;
+  signatures: Record<string, unknown>;
+}
+
+export interface DisputeEnforcement {
+  remedy: string;
+  amount_usdc?: string | null;
+  executed_at: string;
+  source_key: string;
+}
+
+export interface Dispute {
+  amcp_version: AmcpVersion;
+  dispute_id: string;
+  claimant: string;
+  respondent: string;
+  subject: DisputeSubject;
+  kind: DisputeKind;
+  remedy: DisputeRemedy;
+  detail?: string;
+  state: DisputeState;
+  tier: DisputeTier;
+  appeals?: number;
+  evidence?: DisputeEvidenceRef[];
+  decision?: DisputeDecision | null;
+  outcome?: DisputeOutcome | null;
+  enforcement?: DisputeEnforcement | null;
+}
+
 export interface SessionMember {
   actor: { type: "agent" | "human"; id: string };
   role: string;

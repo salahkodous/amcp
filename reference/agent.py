@@ -47,6 +47,7 @@ class Store:
         self.sessions = {}     # session_id -> session dict (single-writer demo;
                                # production: leader/queue + versioned store)
         self.negotiations = {}  # negotiation_id -> negotiation dict
+        self.disputes = {}  # dispute_id -> dispute dict (spec/disputes.md)
 
 
 store = Store()
@@ -89,6 +90,10 @@ try:
     from . import escalation as esc_eval  # noqa: E402
 except ImportError:  # pragma: no cover
     import escalation as esc_eval  # type: ignore[no-redef]
+try:
+    from . import disputes as dsp_eval  # noqa: E402
+except ImportError:  # pragma: no cover
+    import disputes as dsp_eval  # type: ignore[no-redef]
 directory = Directory()
 
 
@@ -300,6 +305,11 @@ class Handler(BaseHTTPRequestHandler):
             if scored is None:
                 return self._error(404, "unknown_agent", "unknown agent")
             self._send(200, scored)
+        elif url.path.startswith("/amcp/disputes/"):
+            parts = url.path.split("/")
+            if len(parts) == 4 and parts[3]:
+                return self._dispute_get(parts[3])
+            return self._error(404, "unknown_method", f"no such endpoint: {url.path}")
         elif url.path.startswith("/amcp/session/"):
             parts = url.path.split("/")
             if len(parts) == 5 and parts[4] == "events":
@@ -340,6 +350,13 @@ class Handler(BaseHTTPRequestHandler):
                 body.get("ref", ""), body.get("outcome", ""),
                 reviewer=body.get("reviewer", ""))
             return self._send(status, resp)
+        if url.path == "/amcp/disputes":
+            return self._dispute_file()
+        if url.path.startswith("/amcp/disputes/"):
+            parts = url.path.split("/")
+            if len(parts) == 5 and parts[3]:
+                return self._dispute_action(parts[3], parts[4])
+            return self._error(404, "unknown_method", f"no such endpoint: {url.path}")
         if url.path == "/amcp/session":
             return self._session_create()
         if url.path.startswith("/amcp/session/"):
@@ -531,6 +548,181 @@ class Handler(BaseHTTPRequestHandler):
         timeline_append(sess, {"kind": "approval_decided", "visibility": ["*"],
                                "actor": m["actor"]["id"], "approval": p["id"], "decision": rec})
         return rec
+
+    # -- disputes (spec/disputes.md) ------------------------------------
+    def _dispute_subject_known(self, subject: dict) -> bool:
+        kind, ref = subject.get("kind"), subject.get("ref")
+        if kind == "receipt":
+            return any(r.get("receipt_id") == ref for r in store.receipts)
+        if kind == "session":
+            return ref in store.sessions
+        return False
+
+    def _dispute_file(self):
+        body = self._sess_body()
+        if body is None:
+            return
+        claimant, respondent = body.get("claimant"), body.get("respondent")
+        subject = body.get("subject") or {}
+        kind, remedy = body.get("kind"), body.get("remedy")
+        if not (claimant and respondent):
+            return self._error(422, "bad_request", "claimant + respondent required")
+        if subject.get("kind") not in ("receipt", "session") or not subject.get("ref"):
+            return self._error(422, "bad_request", "subject needs kind receipt|session + ref")
+        if not self._dispute_subject_known(subject):
+            return self._error(422, "bad_request", "unknown dispute subject")
+        if kind not in dsp_eval.KINDS:
+            return self._error(422, "bad_request", f"kind must be one of {dsp_eval.KINDS}")
+        if remedy not in dsp_eval.REMEDIES:
+            return self._error(422, "bad_request", f"remedy must be one of {dsp_eval.REMEDIES}")
+        key = dsp_eval.open_key(subject, kind)
+        for d in store.disputes.values():
+            if dsp_eval.open_key(d["subject"], d["kind"]) == key \
+                    and d["state"] not in ("resolved", "withdrawn"):
+                return self._error(409, "terms_rejected",
+                                   "open dispute already exists for this subject+kind")
+        try:
+            timeout = int(body.get("timeout_seconds", dsp_eval.ANSWER_DEFAULT_SECONDS))
+            if timeout < 0:
+                raise ValueError()
+        except (ValueError, TypeError):
+            return self._error(422, "bad_request", "timeout_seconds must be a non-negative integer")
+        did = "dsp_" + uuid.uuid4().hex[:16]
+        d = {"amcp_version": AMCP_VERSION, "dispute_id": did,
+             "claimant": claimant, "respondent": respondent,
+             "subject": {"kind": subject["kind"], "ref": subject["ref"]},
+             "kind": kind, "remedy": remedy, "detail": body.get("detail", ""),
+             "state": "filed", "tier": "respondent", "appeals": 0,
+             "evidence": [], "decision": None, "outcome": None, "enforcement": None,
+             "answer_by": time.time() + timeout, "appeal_until": None,
+             "filed_at": now_iso(),
+             "history": [{"at": now_iso(), "kind": "filed", "actor": claimant,
+                          "detail": f"{kind} / {remedy}"}]}
+        store.disputes[did] = d
+        return self._send(201, {"dispute_id": did, "state": "filed", "tier": "respondent",
+                                "answer_by": time.strftime("%Y-%m-%dT%H:%M:%SZ",
+                                                           time.gmtime(d["answer_by"]))})
+
+    def _dispute_lookup(self, did: str):
+        d = store.disputes.get(did)
+        if not d:
+            self._error(404, "unknown_agent", f"unknown dispute: {did!r}")
+            return None
+        dsp_eval.touch(d, time.time(), now_iso())
+        return d
+
+    def _dispute_get(self, did: str):
+        d = self._dispute_lookup(did)
+        if d is None:
+            return
+        return self._send(200, {"dispute_id": did, "state": d["state"], "tier": d["tier"],
+                                "outcome": d["outcome"], "dispute": d, "history": d["history"]})
+
+    def _dispute_action(self, did: str, action: str):
+        body = self._sess_body()
+        if body is None:
+            return
+        d = self._dispute_lookup(did)
+        if d is None:
+            return
+        if action == "evidence":
+            if d["state"] in ("decided", "resolved", "withdrawn"):
+                return self._error(409, "terms_rejected",
+                                   f"dispute is {d['state']}; evidence closed")
+            ref = body.get("ref")
+            if not ref:
+                return self._error(422, "bad_request", "evidence ref required")
+            d["evidence"].append({"ref": ref, "hash": body.get("hash"),
+                                  "uri": body.get("uri"), "kind": body.get("kind", "supporting"),
+                                  "bound_at": now_iso(),
+                                  "bound_by": body.get("actor", d["claimant"])})
+            if d["state"] == "filed":
+                d["state"] = "evidenced"
+            d["history"].append({"at": now_iso(), "kind": "evidence_bound",
+                                 "actor": body.get("actor", d["claimant"]), "detail": ref})
+            return self._send(200, {"state": d["state"], "evidence": len(d["evidence"])})
+        if action == "respond":
+            ok, why = dsp_eval.can_respond(d)
+            if not ok:
+                return self._error(409, "terms_rejected", why)
+            if body.get("actor") != d["respondent"]:
+                return self._error(403, "capability_denied", "only the respondent answers a claim")
+            verdict = body.get("verdict")
+            if verdict not in ("concede", "deny", "counter"):
+                return self._error(422, "bad_request", "verdict must be concede|deny|counter")
+            d["history"].append({"at": now_iso(), "kind": "responded",
+                                 "actor": d["respondent"],
+                                 "detail": f"{verdict}: {body.get('note', '')}"})
+            if verdict == "concede":
+                d["state"], d["outcome"] = "resolved", "conceded"
+            return self._send(200, {"state": d["state"], "outcome": d["outcome"]})
+        if action == "adjudicate":
+            ok, why = dsp_eval.can_adjudicate(d)
+            if not ok:
+                return self._error(409, "terms_rejected", why)
+            arbiter = body.get("arbiter")
+            outcome = body.get("outcome")
+            remedy = body.get("remedy")
+            if not arbiter:
+                return self._error(422, "bad_request", "arbiter required")
+            if outcome not in ("upheld", "rejected", "split"):
+                return self._error(422, "bad_request", "outcome must be upheld|rejected|split")
+            if remedy not in dsp_eval.REMEDIES:
+                return self._error(422, "bad_request", f"remedy must be one of {dsp_eval.REMEDIES}")
+            amount = None
+            if remedy == "refund_partial":
+                try:
+                    amount = str(_amt(body.get("amount_usdc", "")))
+                except ValueError as e:
+                    return self._error(422, "bad_request", f"refund_partial needs amount_usdc: {e}")
+            try:
+                appeal_window = int(body.get("appeal_seconds", dsp_eval.APPEAL_DEFAULT_SECONDS))
+                if appeal_window < 0:
+                    raise ValueError()
+            except (ValueError, TypeError):
+                return self._error(422, "bad_request", "appeal_seconds must be a non-negative integer")
+            decision = {"outcome": outcome, "remedy": remedy, "amount_usdc": amount,
+                        "rationale": body.get("rationale", ""), "arbiter": arbiter,
+                        "tier": d["tier"], "decided_at": now_iso()}
+            decision["signatures"] = {"platform": signer.sign(
+                {k: v for k, v in decision.items() if k != "signatures"})}
+            decision["signature_valid"] = verify_envelope(
+                {k: v for k, v in decision.items() if k not in ("signatures", "signature_valid")},
+                decision["signatures"]["platform"])
+            d["decision"] = decision
+            d["state"] = "decided"
+            d["appeal_until"] = time.time() + appeal_window
+            d["enforcement"] = {"remedy": remedy, "amount_usdc": amount,
+                                "executed_at": now_iso(),
+                                "source_key": f"dispute:{did}:decision",
+                                "note": "reference executes no external hooks; "
+                                        "production runs pre-committed escrow/reputation hooks"}
+            d["history"].append({"at": now_iso(), "kind": "decided",
+                                 "actor": arbiter, "detail": f"{outcome} / {remedy}"})
+            return self._send(200, {"state": "decided", "decision": decision,
+                                    "enforcement": d["enforcement"]})
+        if action == "appeal":
+            ok, why = dsp_eval.can_appeal(d, time.time())
+            if not ok:
+                return self._error(409, "terms_rejected", why)
+            actor = body.get("actor")
+            if actor not in (d["claimant"], d["respondent"]):
+                return self._error(403, "capability_denied", "only a party may appeal")
+            d["appeals"] += 1
+            d["state"], d["tier"] = "adjudicating", "principal"
+            d["appeal_until"] = None
+            d["history"].append({"at": now_iso(), "kind": "appealed", "actor": actor,
+                                 "detail": body.get("grounds", "")})
+            return self._send(200, {"state": "adjudicating", "tier": "principal"})
+        if action == "withdraw":
+            if d["state"] in ("resolved", "withdrawn", "decided"):
+                return self._error(409, "terms_rejected", f"dispute is {d['state']}")
+            if body.get("actor") != d["claimant"]:
+                return self._error(403, "capability_denied", "only the claimant withdraws")
+            d["state"] = "withdrawn"
+            d["history"].append({"at": now_iso(), "kind": "withdrawn", "actor": d["claimant"]})
+            return self._send(200, {"state": "withdrawn"})
+        return self._error(404, "unknown_method", f"no such dispute action: {action!r}")
 
     def _nego_terms(self, terms: dict) -> dict:
         price = _amt(terms.get("price_usdc", "0"))

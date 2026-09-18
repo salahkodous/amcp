@@ -1,0 +1,116 @@
+{
+  "version": "0.1",
+  "fixtures": [
+    {
+      "name": "echo-mints-receipt",
+      "request": {"method": "POST", "path": "/amcp/task",
+                  "headers": {"Idempotency-Key": "dispute-002"},
+                  "body": {"capability": "echo", "inputs": {"text": "paid work"}}},
+      "capture": {"rid": "receipt.receipt_id"},
+      "expect": {"status": 200, "has": ["receipt"]}
+    },
+    {
+      "name": "file-claim-instant-expiry",
+      "request": {"method": "POST", "path": "/amcp/disputes",
+                  "body": {"claimant": "amcp:t:buyer", "respondent": "amcp:t:seller",
+                           "subject": {"kind": "receipt", "ref": "{rid}"},
+                           "kind": "non_delivery", "remedy": "refund_full",
+                           "timeout_seconds": 0}},
+      "capture": {"did": "dispute_id"},
+      "expect": {"status": 201, "where": {"state": "filed"}}
+    },
+    {
+      "name": "silence-escalates-on-touch",
+      "request": {"method": "GET", "path": "/amcp/disputes/{did}"},
+      "expect": {"status": 200,
+                 "where": {"state": "adjudicating", "tier": "arbiter"}}
+    },
+    {
+      "name": "arbiter-decides",
+      "request": {"method": "POST", "path": "/amcp/disputes/{did}/adjudicate",
+                  "body": {"arbiter": "amcp:t:arbiter", "outcome": "upheld",
+                           "remedy": "refund_full", "rationale": "no delivery evidence"}},
+      "expect": {"status": 200,
+                 "where": {"state": "decided", "decision.outcome": "upheld"},
+                 "has": ["enforcement"]}
+    },
+    {
+      "name": "decision-self-verifies",
+      "request": {"method": "GET", "path": "/amcp/disputes/{did}"},
+      "expect": {"status": 200,
+                 "has": ["dispute"],
+                 "where": {"state": "decided", "dispute.decision.signature_valid": true}}
+    },
+    {
+      "name": "second-decision-refused",
+      "request": {"method": "POST", "path": "/amcp/disputes/{did}/adjudicate",
+                  "body": {"arbiter": "amcp:t:arbiter", "outcome": "rejected",
+                           "remedy": "concede"}},
+      "expect": {"status": 409, "where": {"error.code": "terms_rejected"}}
+    },
+    {
+      "name": "appeal-reopens-one-level-up",
+      "request": {"method": "POST", "path": "/amcp/disputes/{did}/appeal",
+                  "body": {"actor": "amcp:t:seller", "grounds": "partial delivery exists"}},
+      "expect": {"status": 200,
+                 "where": {"state": "adjudicating", "tier": "principal"}}
+    },
+    {
+      "name": "second-appeal-refused",
+      "request": {"method": "POST", "path": "/amcp/disputes/{did}/appeal",
+                  "body": {"actor": "amcp:t:seller", "grounds": "again"}},
+      "expect": {"status": 409, "where": {"error.code": "terms_rejected"}}
+    },
+    {
+      "name": "principal-decides-final",
+      "request": {"method": "POST", "path": "/amcp/disputes/{did}/adjudicate",
+                  "body": {"arbiter": "user:t:principal", "outcome": "split",
+                           "remedy": "refund_partial", "amount_usdc": "0.05",
+                           "appeal_seconds": 0}},
+      "expect": {"status": 200,
+                 "where": {"state": "decided", "decision.outcome": "split"}}
+    },
+    {
+      "name": "appeal-window-lapses-to-resolved",
+      "request": {"method": "GET", "path": "/amcp/disputes/{did}"},
+      "expect": {"status": 200, "where": {"state": "resolved"}}
+    },
+    {
+      "name": "fresh-claim-withdraws-cleanly",
+      "request": {"method": "POST", "path": "/amcp/disputes",
+                  "body": {"claimant": "amcp:t:buyer", "respondent": "amcp:t:seller",
+                           "subject": {"kind": "receipt", "ref": "{rid}"},
+                           "kind": "late_delivery", "remedy": "concede"}},
+      "capture": {"did2": "dispute_id"},
+      "expect": {"status": 201}
+    },
+    {
+      "name": "claimant-withdraws",
+      "request": {"method": "POST", "path": "/amcp/disputes/{did2}/withdraw",
+                  "body": {"actor": "amcp:t:buyer"}},
+      "expect": {"status": 200, "where": {"state": "withdrawn"}}
+    },
+    {
+      "name": "adjudicate-withdrawn-refused",
+      "request": {"method": "POST", "path": "/amcp/disputes/{did2}/adjudicate",
+                  "body": {"arbiter": "amcp:t:arbiter", "outcome": "upheld",
+                           "remedy": "refund_full"}},
+      "expect": {"status": 409, "where": {"error.code": "terms_rejected"}}
+    },
+    {
+      "name": "stranger-cannot-withdraw",
+      "request": {"method": "POST", "path": "/amcp/disputes",
+                  "body": {"claimant": "amcp:t:buyer", "respondent": "amcp:t:seller",
+                           "subject": {"kind": "receipt", "ref": "{rid}"},
+                           "kind": "partial_delivery", "remedy": "split"}},
+      "capture": {"did3": "dispute_id"},
+      "expect": {"status": 201}
+    },
+    {
+      "name": "withdraw-by-non-claimant-refused",
+      "request": {"method": "POST", "path": "/amcp/disputes/{did3}/withdraw",
+                  "body": {"actor": "amcp:t:seller"}},
+      "expect": {"status": 403, "where": {"error.code": "capability_denied"}}
+    }
+  ]
+}

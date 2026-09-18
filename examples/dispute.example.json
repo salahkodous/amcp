@@ -1,0 +1,33 @@
+{
+  "amcp_version": "0.1",
+  "dispute_id": "dsp_example00000001",
+  "claimant": "amcp:example:buyer_1",
+  "respondent": "amcp:example:seller_9",
+  "subject": {"kind": "receipt", "ref": "rcpt_example00000001"},
+  "kind": "partial_delivery",
+  "remedy": "split",
+  "detail": "62 of 100 distributors delivered before the deadline",
+  "state": "decided",
+  "tier": "arbiter",
+  "appeals": 0,
+  "evidence": [
+    {"ref": "artifact:distributors-batch-1", "hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+     "uri": "https://buyer.example/ev/62", "kind": "delivery_log"}
+  ],
+  "decision": {
+    "outcome": "split",
+    "remedy": "refund_partial",
+    "amount_usdc": "15.20",
+    "rationale": "62% delivered; refund pro-rata",
+    "arbiter": "amcp:example:arbiter_3",
+    "signature_valid": true,
+    "signatures": {"platform": "ed25519:sig-d"}
+  },
+  "outcome": null,
+  "enforcement": {
+    "remedy": "refund_partial",
+    "amount_usdc": "15.20",
+    "executed_at": "2026-09-16T07:10:00Z",
+    "source_key": "dispute:dsp_example00000001:decision"
+  }
+}

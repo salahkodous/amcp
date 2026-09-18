@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { canonicalJson, verifyEd25519, TEST_VECTOR } from "../src/envelope.js";
 import { IdentityClient } from "../src/descriptor.js";
 import { TaskClient } from "../src/task.js";
+import { DisputeClient } from "../src/dispute.js";
 import { SessionClient } from "../src/session.js";
 import { AmcpError } from "../src/errors.js";
 
@@ -55,6 +56,24 @@ describe("errors", () => {
     expect(err).toBeInstanceOf(AmcpError);
     expect((err as AmcpError).code).toBe("unknown_capability");
     expect((err as AmcpError).is("unknown_capability")).toBe(true);
+  });
+});
+
+describe("disputes", () => {
+  it("file → respond → concede roundtrip through the client", async () => {
+    const tasks = new TaskClient({ baseUrl: BASE });
+    const disputes = new DisputeClient({ baseUrl: BASE });
+    const ran = await tasks.run("echo", { text: "sdk dispute" }, { idempotencyKey: "sdk-dispute-001" });
+    const filed = await disputes.file({
+      claimant: "sdk:buyer", respondent: "sdk:seller",
+      subject: { kind: "receipt", ref: ran.receipt.receipt_id },
+      kind: "wrong_output", remedy: "redo",
+    });
+    expect(filed.state).toBe("filed");
+    const done = await disputes.respond(filed.dispute_id, "sdk:seller", "concede");
+    expect(done.state).toBe("resolved");
+    const record = await disputes.read(filed.dispute_id);
+    expect(record.dispute.outcome).toBe("conceded");
   });
 });
 

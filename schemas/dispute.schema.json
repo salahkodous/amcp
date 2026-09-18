@@ -1,0 +1,141 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://amcp.dev/schemas/v0.1/dispute.schema.json",
+  "title": "AMCP Dispute Record",
+  "description": "Portable dispute lifecycle state: claim, evidence refs, adjudication, enforcement. Full design in spec/disputes.md. AMCP v0.1.",
+  "type": "object",
+  "required": [
+    "amcp_version",
+    "dispute_id",
+    "claimant",
+    "respondent",
+    "subject",
+    "kind",
+    "remedy",
+    "state",
+    "tier"
+  ],
+  "properties": {
+    "amcp_version": {
+      "const": "0.1"
+    },
+    "dispute_id": {
+      "type": "string",
+      "pattern": "^dsp_[A-Za-z0-9_-]{8,64}$"
+    },
+    "claimant": {
+      "type": "string"
+    },
+    "respondent": {
+      "type": "string"
+    },
+    "subject": {
+      "type": "object",
+      "required": ["kind", "ref"],
+      "properties": {
+        "kind": {
+          "enum": ["receipt", "session"]
+        },
+        "ref": {
+          "type": "string"
+        }
+      }
+    },
+    "kind": {
+      "enum": [
+        "non_delivery",
+        "partial_delivery",
+        "wrong_output",
+        "late_delivery",
+        "unauthorized_delegation",
+        "evidence_forged",
+        "double_commit"
+      ]
+    },
+    "remedy": {
+      "enum": [
+        "refund_full",
+        "refund_partial",
+        "redo",
+        "split",
+        "concede",
+        "escalate"
+      ]
+    },
+    "detail": {
+      "type": "string"
+    },
+    "state": {
+      "enum": [
+        "filed",
+        "evidenced",
+        "adjudicating",
+        "decided",
+        "resolved",
+        "withdrawn"
+      ]
+    },
+    "tier": {
+      "enum": ["respondent", "arbiter", "principal"]
+    },
+    "appeals": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["ref"],
+        "properties": {
+          "ref": {"type": "string"},
+          "hash": {"type": "string"},
+          "uri": {"type": "string"},
+          "kind": {"type": "string"}
+        }
+      }
+    },
+    "decision": {
+      "type": ["object", "null"],
+      "required": ["outcome", "remedy", "arbiter", "signatures"],
+      "properties": {
+        "outcome": {
+          "enum": ["upheld", "rejected", "split"]
+        },
+        "remedy": {
+          "enum": [
+            "refund_full",
+            "refund_partial",
+            "redo",
+            "split",
+            "concede",
+            "escalate"
+          ]
+        },
+        "amount_usdc": {
+          "type": ["string", "null"],
+          "pattern": "^[0-9]+(\\.[0-9]{1,6})?$"
+        },
+        "rationale": {"type": "string"},
+        "arbiter": {"type": "string"},
+        "signature_valid": {"type": "boolean"},
+        "signatures": {"type": "object"}
+      }
+    },
+    "outcome": {
+      "type": ["string", "null"],
+      "enum": ["conceded", "upheld", "rejected", "split", null]
+    },
+    "enforcement": {
+      "type": ["object", "null"],
+      "required": ["remedy", "executed_at", "source_key"],
+      "properties": {
+        "remedy": {"type": "string"},
+        "amount_usdc": {"type": ["string", "null"]},
+        "executed_at": {"type": "string"},
+        "source_key": {"type": "string"}
+      }
+    }
+  }
+}

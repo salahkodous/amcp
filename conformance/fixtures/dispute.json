@@ -1,0 +1,97 @@
+{
+  "version": "0.1",
+  "fixtures": [
+    {
+      "name": "echo-mints-disputable-receipt",
+      "request": {"method": "POST", "path": "/amcp/task",
+                  "headers": {"Idempotency-Key": "dispute-001"},
+                  "body": {"capability": "echo", "inputs": {"text": "billable work"}}},
+      "capture": {"rid": "receipt.receipt_id"},
+      "expect": {"status": 200, "has": ["receipt"]}
+    },
+    {
+      "name": "file-claim",
+      "request": {"method": "POST", "path": "/amcp/disputes",
+                  "body": {"claimant": "amcp:t:buyer", "respondent": "amcp:t:seller",
+                           "subject": {"kind": "receipt", "ref": "{rid}"},
+                           "kind": "wrong_output", "remedy": "redo",
+                           "detail": "echo dropped the last word"}},
+      "capture": {"did": "dispute_id"},
+      "expect": {"status": 201,
+                 "where": {"state": "filed", "tier": "respondent"},
+                 "has": ["dispute_id", "answer_by"]}
+    },
+    {
+      "name": "double-file-refused",
+      "request": {"method": "POST", "path": "/amcp/disputes",
+                  "body": {"claimant": "amcp:t:buyer", "respondent": "amcp:t:seller",
+                           "subject": {"kind": "receipt", "ref": "{rid}"},
+                           "kind": "wrong_output", "remedy": "redo"}},
+      "expect": {"status": 409, "where": {"error.code": "terms_rejected"}}
+    },
+    {
+      "name": "unknown-kind-rejected",
+      "request": {"method": "POST", "path": "/amcp/disputes",
+                  "body": {"claimant": "amcp:t:buyer", "respondent": "amcp:t:seller",
+                           "subject": {"kind": "receipt", "ref": "{rid}"},
+                           "kind": "vibes", "remedy": "redo"}},
+      "expect": {"status": 422, "where": {"error.code": "bad_request"}}
+    },
+    {
+      "name": "unknown-remedy-rejected",
+      "request": {"method": "POST", "path": "/amcp/disputes",
+                  "body": {"claimant": "amcp:t:buyer", "respondent": "amcp:t:seller",
+                           "subject": {"kind": "receipt", "ref": "{rid}"},
+                           "kind": "wrong_output", "remedy": "public_apology"}},
+      "expect": {"status": 422, "where": {"error.code": "bad_request"}}
+    },
+    {
+      "name": "unknown-subject-rejected",
+      "request": {"method": "POST", "path": "/amcp/disputes",
+                  "body": {"claimant": "amcp:t:buyer", "respondent": "amcp:t:seller",
+                           "subject": {"kind": "receipt", "ref": "rcpt_nope"},
+                           "kind": "wrong_output", "remedy": "redo"}},
+      "expect": {"status": 422, "where": {"error.code": "bad_request"}}
+    },
+    {
+      "name": "bind-evidence",
+      "request": {"method": "POST", "path": "/amcp/disputes/{did}/evidence",
+                  "body": {"ref": "artifact:echo-1",
+                           "hash": "sha256:abc123",
+                           "uri": "https://buyer.example/ev/1"}},
+      "expect": {"status": 200, "where": {"state": "evidenced"}}
+    },
+    {
+      "name": "respondent-concedes",
+      "request": {"method": "POST", "path": "/amcp/disputes/{did}/respond",
+                  "body": {"actor": "amcp:t:seller", "verdict": "concede",
+                           "note": "rerunning now"}},
+      "expect": {"status": 200,
+                 "where": {"state": "resolved", "outcome": "conceded"}}
+    },
+    {
+      "name": "respond-after-resolved-refused",
+      "request": {"method": "POST", "path": "/amcp/disputes/{did}/respond",
+                  "body": {"actor": "amcp:t:seller", "verdict": "concede"}},
+      "expect": {"status": 409, "where": {"error.code": "terms_rejected"}}
+    },
+    {
+      "name": "withdraw-after-resolved-refused",
+      "request": {"method": "POST", "path": "/amcp/disputes/{did}/withdraw",
+                  "body": {"actor": "amcp:t:buyer"}},
+      "expect": {"status": 409, "where": {"error.code": "terms_rejected"}}
+    },
+    {
+      "name": "record-shows-full-history",
+      "request": {"method": "GET", "path": "/amcp/disputes/{did}"},
+      "expect": {"status": 200,
+                 "where": {"state": "resolved", "outcome": "conceded"},
+                 "has": ["dispute", "history"]}
+    },
+    {
+      "name": "unknown-dispute-404",
+      "request": {"method": "GET", "path": "/amcp/disputes/dsp_nope"},
+      "expect": {"status": 404, "where": {"error.code": "unknown_agent"}}
+    }
+  ]
+}
