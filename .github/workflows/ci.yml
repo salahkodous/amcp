@@ -49,6 +49,15 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install reference crypto (SDK tests spawn the reference server)
+        run: |
+          pip install pynacl
+          python -c "import nacl.signing; print('pynacl ok:', nacl.__version__ if hasattr(nacl, '__version__') else 'installed')"
+          python -c "import sys; sys.path.insert(0, '.'); from reference.agent import init_signer, signer; init_signer(b'ci-probe'); print('signer alg:', signer.alg)"
+        working-directory: .
       - name: Install (zero runtime deps; dev only)
         run: npm ci
       - name: Build + full suite (fixtures replay against reference included)
