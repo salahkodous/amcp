@@ -201,7 +201,7 @@ approval.**
   vectors frozen as the regression floor.
 - The reference unfreezing only for clarity, never for cleverness.
 
-## 8. Open questions
+## 10. Open questions
 
 - Who runs the first directory nobody owns, and what makes operators trust
   a ranker they didn't write? (Candidate answer: because they can recompute it.)
