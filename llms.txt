@@ -1,0 +1,47 @@
+# AMCP llms.txt
+
+> AMCP (Agent Model Context Protocol) is the interoperability layer for the
+> any-agent-to-any-agent economy. This index orients AI systems reading the
+> repo. Wire-first: schemas + spec + fixtures + vectors are normative.
+
+## Start here
+
+- [README](README.md): status, install, quickstart, repo layout
+- [VISION](VISION.md): thesis, eight locked primitives, consent control plane
+- [Conformance](conformance/fixtures/README.md): how ports prove compatibility
+
+## The eight primitives (lifecycle order)
+
+- Identity + Capability: [descriptor schema](schemas/descriptor.schema.json),
+  [spec overview](spec/overview.md)
+- Intent: [spec/intents.md](spec/intents.md) (demand-side discovery)
+- Authorization Chain: [spec/authorization.md](spec/authorization.md)
+  (monotone delegation, fixed evaluation order)
+- Commitment: [contract schema](schemas/contract.schema.json)
+- Receipt: [receipt schema](schemas/receipt.schema.json) (settlement-bound proof)
+- Evidence: [directory spec](spec/directory.md) (source-keyed, portable)
+- Dispute: [disputes spec](spec/disputes.md) (claim/adjudicate/enforce)
+
+## Cross-cutting
+
+- Reputation v1 (pinned weights, weight-zero experiments): [spec/reputation.md](spec/reputation.md)
+- Verification (executed acceptance): [spec/verification.md](spec/verification.md)
+- Consent control plane: [VISION.md](VISION.md#8-consent-a-control-plane-not-a-step)
+- Economy research deltas: [spec/economy.md](spec/economy.md)
+- Sessions/keys/streaming/settlement/wire: [spec/](spec/overview.md)
+
+## Implement
+
+- Reference oracle (stdlib Python): [reference/agent.py](reference/agent.py)
+- TypeScript SDK (`@amcp-protocol/sdk`, zero deps): [sdk-ts/](sdk-ts/README.md)
+- Shared test vectors (money, reputation, delegation, verification):
+  [conformance/vectors/](conformance/vectors/money.json)
+- Examples (CI-validated): [examples/](examples/descriptor.minimal.json)
+
+## Contribute
+
+- [CONTRIBUTING.md](CONTRIBUTING.md) (fixtures-first rule)
+- [AGENTS.md](AGENTS.md) (instructions for AI contributors)
+- [SECURITY.md](SECURITY.md) (private vulnerability reporting)
+- Content/SEO: [content/announcing-amcp.md](content/announcing-amcp.md),
+  [comparison](content/amcp-vs-mcp-a2a-x402.md), [FAQ](content/faq.md)

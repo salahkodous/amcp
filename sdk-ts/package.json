@@ -7,11 +7,12 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {".": {"types": "./dist/index.d.ts", "default": "./dist/index.js"}},
-  "files": ["dist"],
+  "files": ["dist", "README.md", "assets"],
   "scripts": {
     "build": "tsc",
     "test": "npm run build && vitest run",
-    "check": "tsc --noEmit"
+    "check": "tsc --noEmit",
+    "prepack": "node -e \"require('fs').mkdirSync('assets',{recursive:true});require('fs').copyFileSync('../docs/logo.svg','assets/logo.svg')\""
   },
   "dependencies": {},
   "devDependencies": {

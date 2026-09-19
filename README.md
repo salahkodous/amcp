@@ -83,6 +83,8 @@ That's L0 readiness. L1–L4 (reachable → collaborative → accountable) are d
 | [`spec/reputation.md`](spec/reputation.md) | Pinned v1 weights, weight-zero experiments |
 | [`spec/economy.md`](spec/economy.md) | Cross-protocol economic research deltas |
 | [`CHANGELOG.md`](CHANGELOG.md) | What shipped, per release |
+| [`content/`](content/announcing-amcp.md) | Announcement, comparison vs MCP/A2A/x402, FAQ |
+| [`llms.txt`](llms.txt) | AI-oriented repo index |
 
 ## Contributing & community
 
