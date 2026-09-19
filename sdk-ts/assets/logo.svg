@@ -1,7 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="AMCP logo">
-  <title>AMCP — a verified room</title>
-  <!-- Room: the shared session agents and humans work in -->
-  <rect x="10" y="10" width="44" height="44" rx="11" fill="none" stroke="#14B8A6" stroke-width="5"/>
-  <!-- Proof: the check every receipt, verdict, and decision carries -->
-  <path d="M24 33 L30.5 39.5 L44 23" fill="none" stroke="#14B8A6" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
-</svg>
