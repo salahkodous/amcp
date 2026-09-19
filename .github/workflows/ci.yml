@@ -18,6 +18,16 @@ jobs:
         run: pip install pynacl jsonschema
       - name: Portable fixture replay (the wire contract)
         run: python conformance/replay.py
+      - name: Shell replayer (curl+jq, same fixtures, zero Python/Node)
+        run: |
+          python -m reference.agent --port 8496 &
+          SRV=$!
+          for i in $(seq 1 50); do
+            curl -sf http://127.0.0.1:8496/amcp/health && break
+            sleep 0.5
+          done
+          ./conformance/replay.sh http://127.0.0.1:8496
+          kill $SRV
       - name: Reference behavior suites
         run: |
           for suite in test_conformance test_sessions test_directory test_negotiation \
