@@ -43,6 +43,11 @@ are load-bearing; violating them breaks cross-implementation compatibility.
   are load-bearing documentation. Update them in the same commit.
 - Never commit secrets. Never invent URLs. Verify by execution, not by
   assertion.
+- Platform-sensitive tooling bites silently: shell scripts need LF endings
+  (enforce via `.gitattributes`), an executable bit (`git update-index
+  --chmod=+x`), and CRLF-tolerant parsing (Windows `jq.exe` emits `\r`).
+  A replayer that can't run where it's written is a rumor — CI on Linux is
+  the verifier when local toolchains are absent.
 
 ## What good looks like
 
