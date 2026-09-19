@@ -1,4 +1,4 @@
-# @amcp/sdk
+# @amcp-protocol/sdk
 
 TypeScript SDK for AMCP. Thin by law: it speaks the protocol fluently and gets out of the way.
 
@@ -10,7 +10,7 @@ npm run check # tsc --noEmit
 ```
 
 ```ts
-import { TaskClient, SessionClient, IdentityClient, DisputeClient } from "@amcp/sdk";
+import { TaskClient, SessionClient, IdentityClient, DisputeClient } from "@amcp-protocol/sdk";
 
 const tasks = new TaskClient({ baseUrl: "https://agent.example" });
 const { receipt } = await tasks.run("score_lead", { lead: {...} },

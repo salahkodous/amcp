@@ -1,5 +1,5 @@
 {
-  "name": "@amcp/sdk",
+  "name": "@amcp-protocol/sdk",
   "version": "0.1.0",
   "description": "TypeScript SDK for AMCP — the any-agent-to-any-agent economy wire protocol",
   "license": "MIT",
