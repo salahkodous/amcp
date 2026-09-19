@@ -135,10 +135,9 @@
     },
     "reputation": {
       "type": "object",
+      "description": "Trust pointers, not scores. receipts_uri is the only load-bearing field; completed_tasks and acceptance_rate are unverified self-claims that directories MUST ignore (reputation is computed from public evidence, never from self-assertion).",
       "required": [
-        "receipts_uri",
-        "completed_tasks",
-        "acceptance_rate"
+        "receipts_uri"
       ],
       "properties": {
         "receipts_uri": {
@@ -147,12 +146,14 @@
         },
         "completed_tasks": {
           "type": "integer",
-          "minimum": 0
+          "minimum": 0,
+          "description": "DEPRECATED (v0.1): unverified self-claim. Ignored by conformant directories."
         },
         "acceptance_rate": {
           "type": "number",
           "minimum": 0,
-          "maximum": 1
+          "maximum": 1,
+          "description": "DEPRECATED (v0.1): unverified self-claim. Ignored by conformant directories."
         }
       },
       "additionalProperties": false
