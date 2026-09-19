@@ -1,5 +1,9 @@
 # AMCP — Agent Model Context Protocol
 
+<p align="left">
+  <img src="docs/logo.svg" width="72" alt="AMCP logo: a verified room">
+</p>
+
 [![AMCP conformance](https://github.com/salahkodous/amcp/actions/workflows/ci.yml/badge.svg)](https://github.com/salahkodous/amcp/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
