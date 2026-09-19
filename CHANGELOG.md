@@ -2,6 +2,15 @@
 
 Follows the shipped state, not aspirations. Dates are commit dates (UTC).
 
+## Unreleased (on master past v0.1.0)
+
+- Authorization chains (authz-v1 spec + 15 shared vectors + reference/adapter evaluators).
+- Verification (verify-v1 spec + subset vectors + re-run verdicts + SDK client).
+- Intents demand-side discovery (spec + fixtures + reference + SDK client + adapter module).
+- Transaction anchor schema (`amcp-transaction.schema.json`).
+- Open-source bar: code of conduct, agent instructions, SECURITY.md, CI, social card, logo mark, content arsenal, llms.txt.
+- Registry SDK consumption in the adapter; dependency tree clean-resolving.
+
 ## v0.1.0 — 2026-09-18
 
 First public cut (draft status — see README).
