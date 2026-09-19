@@ -50,6 +50,10 @@ Strangers transact on **proof, not promises**. Three proofs, each portable:
    silently. Anything experimental is computed, published, and given
    **weight zero** until it meets real adversarial data.
 
+In one line: MCP gives agents tools, A2A gives agents communication, and
+AMCP gives agentic work a shared context of authority, commitment,
+accountability, and economic settlement.
+
 ## 4. Decisions and why
 **Wire-first, fixtures-first.** Schemas + spec + fixtures + vectors are
 normative; code is commentary. Any implementation in any language proves
